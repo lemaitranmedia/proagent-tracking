@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>ProAgent Tracking Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14304D;
+    --ink-2:#1B2A4A;
+    --paper:#F3F5F4;
+    --paper-2:#FFFFFF;
+    --slate:#64748B;
+    --slate-light:#B9C2CC;
+    --amber:#E8A33D;
+    --amber-dark:#C97F1E;
+    --green:#2F855A;
+    --green-bg:#E7F3EC;
+    --red:#C0392B;
+    --red-bg:#FBEAE8;
+    --line:#DDE3E2;
+    --radius:14px;
+    --shadow: 0 2px 10px rgba(20,48,77,0.08);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink-2);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  h1,h2,h3,.display{font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:0.01em;}
+  #app{max-width:480px;margin:0 auto;min-height:100vh;background:var(--paper);display:flex;flex-direction:column;}
+  .screen{display:none;flex-direction:column;flex:1;padding:20px 18px 100px;}
+  .screen.active{display:flex;}
+
+  /* Top bar */
+  .topbar{position:sticky;top:0;z-index:10;background:var(--ink);color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:var(--shadow);}
+  .topbar .brand{display:flex;flex-direction:column;line-height:1;}
+  .topbar .brand .name{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:19px;letter-spacing:0.03em;}
+  .topbar .brand .sub{font-size:10px;color:var(--slate-light);letter-spacing:0.08em;text-transform:uppercase;margin-top:2px;}
+  .topbar button.back{background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0 8px 0 0;}
+  .topbar .userchip{font-size:12px;color:var(--slate-light);text-align:right;}
+  .topbar .userchip b{color:#fff;display:block;font-size:13px;}
+
+  /* Typography helpers */
+  .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:var(--slate);font-weight:600;margin-bottom:6px;}
+  .title{font-size:26px;margin:0 0 4px;}
+  .desc{color:var(--slate);font-size:14px;margin:0 0 20px;line-height:1.5;}
+
+  /* Cards */
+  .card{background:var(--paper-2);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border:1px solid var(--line);margin-bottom:14px;}
+  .tap-card{display:flex;align-items:center;gap:14px;padding:20px;border-radius:var(--radius);background:var(--paper-2);border:1px solid var(--line);box-shadow:var(--shadow);cursor:pointer;margin-bottom:14px;transition:transform .12s ease;}
+  .tap-card:active{transform:scale(0.98);}
+  .tap-card .icon{width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;}
+  .tap-card .icon.blue{background:#E8EFF6;color:var(--ink);}
+  .tap-card .icon.amber{background:#FBF1E1;color:var(--amber-dark);}
+  .tap-card .icon.slate{background:#EEF1F3;color:var(--slate);}
+  .tap-card .t{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;}
+  .tap-card .d{font-size:12.5px;color:var(--slate);margin-top:2px;}
+  .tap-card .chev{margin-left:auto;color:var(--slate-light);font-size:20px;}
+
+  /* Forms */
+  label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin:14px 0 6px;}
+  label:first-child{margin-top:0;}
+  input,select,textarea{width:100%;padding:12px 13px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:15px;font-family:'Inter',sans-serif;color:var(--ink-2);}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber);}
+  textarea{resize:vertical;min-height:70px;}
+  .hint{font-size:11.5px;color:var(--slate);margin-top:4px;}
+
+  /* Buttons */
+  .btn{display:block;width:100%;text-align:center;padding:14px;border-radius:11px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:0.03em;border:none;cursor:pointer;text-transform:uppercase;}
+  .btn-primary{background:var(--ink);color:#fff;}
+  .btn-primary:active{background:var(--ink-2);}
+  .btn-amber{background:var(--amber);color:#3A2508;}
+  .btn-outline{background:transparent;color:var(--ink);border:1.5px solid var(--ink);}
+  .btn-danger{background:var(--red);color:#fff;}
+  .btn-ghost{background:transparent;color:var(--slate);font-weight:600;text-transform:none;font-family:'Inter',sans-serif;font-size:13px;}
+  .btn[disabled]{opacity:0.45;pointer-events:none;}
+  .btn-row{display:flex;gap:10px;}
+  .btn-row .btn{flex:1;}
+
+  /* Status badges */
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:0.04em;}
+  .badge.pendingsm, .badge.pendingssm{background:#FBF1E1;color:var(--amber-dark);}
+  .badge.approved{background:var(--green-bg);color:var(--green);}
+  .badge.rejectedsm, .badge.rejectedssm{background:var(--red-bg);color:var(--red);}
+  .badge.draft{background:#EEF1F3;color:var(--slate);}
+
+  /* Stamp — signature element for checkin result */
+  .stamp-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px 10px;}
+  .stamp{border:4px solid var(--green);color:var(--green);font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:22px;text-transform:uppercase;letter-spacing:0.06em;padding:14px 26px;border-radius:10px;transform:rotate(-7deg);position:relative;}
+  .stamp.invalid{border-color:var(--red);color:var(--red);}
+  .stamp .sub{display:block;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400;letter-spacing:0;margin-top:4px;text-transform:none;}
+  .stamp-wrap .meta{margin-top:18px;text-align:center;font-size:13px;color:var(--slate);}
+
+  /* List rows */
+  .row{display:flex;justify-content:space-between;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line);}
+  .row:last-child{border-bottom:none;}
+  .row .l .t{font-weight:600;font-size:14.5px;}
+  .row .l .s{font-size:12px;color:var(--slate);margin-top:2px;}
+  .row .r{text-align:right;font-size:12px;color:var(--slate);}
+
+  /* Checkpoint pick list */
+  .pick{display:flex;align-items:center;justify-content:space-between;padding:14px;border:1.5px solid var(--line);border-radius:11px;margin-bottom:10px;cursor:pointer;background:#fff;}
+  .pick.selected{border-color:var(--ink);background:#F3F6FB;}
+  .pick .t{font-weight:600;font-size:14.5px;}
+  .pick .s{font-size:12px;color:var(--slate);margin-top:2px;}
+
+  .empty{text-align:center;padding:40px 10px;color:var(--slate);font-size:13.5px;}
+  .empty .big{font-size:34px;margin-bottom:8px;}
+
+  .tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--line);}
+  .tab{flex:1;text-align:center;padding:10px 4px;font-size:12.5px;font-weight:600;color:var(--slate);cursor:pointer;border-bottom:2px solid transparent;}
+  .tab.active{color:var(--ink);border-color:var(--amber);}
+
+  .banner{padding:11px 13px;border-radius:10px;font-size:13px;margin-bottom:14px;}
+  .banner.err{background:var(--red-bg);color:var(--red);}
+  .banner.ok{background:var(--green-bg);color:var(--green);}
+  .banner.info{background:#E8EFF6;color:var(--ink);}
+
+  .photo-preview{width:100%;border-radius:11px;margin-top:10px;border:1px solid var(--line);}
+  .gps-box{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:11px;padding:13px;margin-top:8px;}
+  .gps-box .dot{width:9px;height:9px;border-radius:50%;background:var(--slate-light);flex-shrink:0;}
+  .gps-box .dot.on{background:var(--green);}
+  .gps-box .txt{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--ink-2);}
+  .gps-box .txt .lbl{font-family:'Inter',sans-serif;font-size:11px;color:var(--slate);display:block;margin-bottom:2px;}
+
+  .loader{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-3px;margin-right:6px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .fab-note{font-size:12px;color:var(--slate);text-align:center;margin-top:14px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===================== LOGIN ===================== -->
+  <div class="screen active" id="screen-login" style="justify-content:center;padding-top:0;">
+    <div style="text-align:center;margin-bottom:34px;">
+      <div class="display" style="font-size:30px;color:var(--ink);letter-spacing:0.02em;">PROAGENT</div>
+      <div style="font-size:11.5px;letter-spacing:0.2em;color:var(--slate);text-transform:uppercase;margin-top:2px;">Tracking Platform</div>
+    </div>
+    <div class="card">
+      <div id="login-banner"></div>
+      <label>Tài khoản</label>
+      <input id="login-username" autocomplete="username" placeholder="vd: sa.nguyenvana">
+      <label>Mật khẩu</label>
+      <input id="login-password" type="password" autocomplete="current-password" placeholder="••••••••">
+      <button class="btn btn-primary" style="margin-top:22px;" onclick="doLogin()" id="login-btn">Đăng nhập</button>
+    </div>
+    <div class="fab-note">Chưa có tài khoản? Liên hệ Admin để được cấp quyền truy cập.</div>
+  </div>
+
+  <!-- ===================== HOME ===================== -->
+  <div class="screen" id="screen-home">
+    <div class="topbar">
+      <div class="brand"><span class="name">PROAGENT</span><span class="sub">Tracking Platform</span></div>
+      <div class="userchip"><b id="home-username"></b><span id="home-role"></span></div>
+    </div>
+    <div style="padding-top:22px;">
+      <div class="eyebrow">Trang chủ</div>
+      <h1 class="title">Chọn hoạt động</h1>
+      <p class="desc">Ghi nhận hoạt động thực địa của bạn — checkin điểm chỉ định hoặc lập biên bản gặp đối tác.</p>
+
+      <div class="tap-card" onclick="goSitetourList()">
+        <div class="icon blue">📍</div>
+        <div><div class="t">Sitetour</div><div class="d">Checkin điểm chỉ định bằng GPS + ảnh</div></div>
+        <div class="chev">›</div>
+      </div>
+      <div class="tap-card" onclick="goMeetingHome()">
+        <div class="icon amber">📝</div>
+        <div><div class="t">Meeting</div><div class="d">Tạo & duyệt biên bản gặp đối tác</div></div>
+        <div class="chev">›</div>
+      </div>
+      <div class="tap-card" id="home-admin-card" style="display:none;" onclick="goAdmin()">
+        <div class="icon slate">⚙️</div>
+        <div><div class="t">Quản trị</div><div class="d">Tài khoản, vùng, điểm checkin</div></div>
+        <div class="chev">›</div>
+      </div>
+    </div>
+    <div style="margin-top:auto;padding-top:20px;">
+      <button class="btn btn-ghost" onclick="logout()">Đăng xuất</button>
+    </div>
+  </div>
+
+  <!-- ===================== SITETOUR: pick checkpoint ===================== -->
+  <div class="screen" id="screen-sitetour-list">
+    <div class="topbar">
+      <button class="back" onclick="goHome()">‹</button>
+      <div class="brand"><span class="name">SITETOUR</span><span class="sub">Chọn điểm checkin</span></div>
+      <button class="back" onclick="goSitetourHistory()" style="font-size:13px;">Lịch sử</button>
+    </div>
+    <div style="padding-top:18px;">
+      <div id="st-list-banner"></div>
+      <div id="st-checkpoint-list"></div>
+      <button class="btn btn-primary" style="margin-top:6px;" id="st-continue-btn" disabled onclick="goCheckinCapture()">Tiếp tục</button>
+    </div>
+  </div>
+
+  <!-- ===================== SITETOUR: capture ===================== -->
+  <div class="screen" id="screen-sitetour-checkin">
+    <div class="topbar">
+      <button class="back" onclick="goSitetourList()">‹</button>
+      <div class="brand"><span class="name">CHECKIN</span><span class="sub" id="st-checkin-point-name">—</span></div>
+      <span></span>
+    </div>
+    <div style="padding-top:18px;">
+      <div id="st-checkin-banner"></div>
+
+      <label style="margin-top:0;">Bước 1 — Vị trí GPS</label>
+      <div class="gps-box">
+        <div class="dot" id="gps-dot"></div>
+        <div class="txt"><span class="lbl">Tọa độ hiện tại</span><span id="gps-coords">Chưa lấy vị trí</span></div>
+      </div>
+      <button class="btn btn-outline" style="margin-top:10px;" onclick="captureGPS()">📡 Bật GPS & lấy vị trí</button>
+
+      <label>Bước 2 — Ảnh xác nhận</label>
+      <input type="file" accept="image/*" capture="environment" id="photo-input" onchange="onPhotoSelected(event)">
+      <img id="photo-preview" class="photo-preview" style="display:none;">
+
+      <button class="btn btn-primary" style="margin-top:24px;" id="submit-checkin-btn" disabled onclick="submitCheckinNow()">Ghi nhận checkin</button>
+    </div>
+  </div>
+
+  <!-- ===================== SITETOUR: result stamp ===================== -->
+  <div class="screen" id="screen-sitetour-result">
+    <div class="topbar">
+      <span></span>
+      <div class="brand"><span class="name">KẾT QUẢ</span><span class="sub">Checkin</span></div>
+      <span></span>
+    </div>
+    <div class="stamp-wrap" id="stamp-container"></div>
+    <div style="margin-top:auto;">
+      <button class="btn btn-primary" onclick="goHome()">Về trang chủ</button>
+      <button class="btn btn-ghost" onclick="goSitetourList()">Checkin điểm khác</button>
+    </div>
+  </div>
+
+  <!-- ===================== SITETOUR: history ===================== -->
+  <div class="screen" id="screen-sitetour-history">
+    <div class="topbar">
+      <button class="back" onclick="goSitetourList()">‹</button>
+      <div class="brand"><span class="name">LỊCH SỬ</span><span class="sub">Checkin đã ghi nhận</span></div>
+      <span></span>
+    </div>
+    <div style="padding-top:18px;" id="st-history-list"></div>
+  </div>
+
+  <!-- ===================== MEETING: home ===================== -->
+  <div class="screen" id="screen-meeting-home">
+    <div class="topbar">
+      <button class="back" onclick="goHome()">‹</button>
+      <div class="brand"><span class="name">MEETING</span><span class="sub">Biên bản gặp đối tác</span></div>
+      <span></span>
+    </div>
+    <div style="padding-top:18px;">
+      <div class="tabs" id="meeting-tabs"></div>
+      <div id="meeting-tab-content"></div>
+    </div>
+  </div>
+
+  <!-- ===================== MEETING: new ===================== -->
+  <div class="screen" id="screen-meeting-new">
+    <div class="topbar">
+      <button class="back" onclick="goMeetingHome()">‹</button>
+      <div class="brand"><span class="name">TẠO MEETING</span><span class="sub">Meeting Minutes</span></div>
+      <span></span>
+    </div>
+    <div style="padding-top:18px;">
+      <div id="mn-banner"></div>
+      <label style="margin-top:0;">Vùng kinh doanh</label>
+      <select id="mn-region"></select>
+
+      <label>Đối tác / Khách hàng</label>
+      <input id="mn-partner" placeholder="Tên đối tác">
+
+      <label>Thời gian gặp</label>
+      <input id="mn-datetime" type="datetime-local">
+
+      <label>Mục đích cuộc họp</label>
+      <textarea id="mn-purpose" placeholder="Mục đích, bối cảnh buổi gặp..."></textarea>
+
+      <label>Thành phần tham dự</label>
+      <textarea id="mn-attendees" placeholder="Tên, chức danh các bên tham dự..."></textarea>
+
+      <label>Nội dung trao đổi</label>
+      <textarea id="mn-content" placeholder="Tóm tắt nội dung đã trao đổi..."></textarea>
+
+      <label>Kết quả</label>
+      <textarea id="mn-result" placeholder="Kết quả đạt được..."></textarea>
+
+      <label>Hành động tiếp theo</label>
+      <textarea id="mn-nextaction" placeholder="Việc cần làm, người phụ trách, thời hạn..."></textarea>
+
+      <button class="btn btn-primary" style="margin-top:22px;" onclick="submitMeetingNow()">Gửi cho SM duyệt</button>
+    </div>
+  </div>
+
+  <!-- ===================== MEETING: detail ===================== -->
+  <div class="screen" id="screen-meeting-detail">
+    <div class="topbar">
+      <button class="back" onclick="goMeetingHome()">‹</button>
+      <div class="brand"><span class="name">CHI TIẾT</span><span class="sub">Meeting Minutes</span></div>
+      <span></span>
+    </div>
+    <div style="padding-top:18px;" id="meeting-detail-body"></div>
+  </div>
+
+  <!-- ===================== ADMIN ===================== -->
+  <div class="screen" id="screen-admin">
+    <div class="topbar">
+      <button class="back" onclick="goHome()">‹</button>
+      <div class="brand"><span class="name">QUẢN TRỊ</span><span class="sub">Accounts · Vùng · Checkpoint</span></div>
+      <span></span>
+    </div>
+    <div style="padding-top:18px;">
+      <div class="tabs" id="admin-tabs">
+        <div class="tab active" data-tab="accounts" onclick="switchAdminTab('accounts')">Tài khoản</div>
+        <div class="tab" data-tab="regions" onclick="switchAdminTab('regions')">Vùng</div>
+        <div class="tab" data-tab="checkpoints" onclick="switchAdminTab('checkpoints')">Checkpoint</div>
+      </div>
+      <div id="admin-tab-content"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* =========================================================
+   CẤU HÌNH — dán URL Web App (Apps Script) của chị vào đây
+   ========================================================= */
+const API_URL = "https://script.google.com/macros/s/AKfycbxnsG0tf_r2lOVsi3O_ybpqkfZfMaSGFB5XbZoxBTjkd-USDi1aehwe3LcQqXCla8dxGw/exec";
+
+/* ============== STATE ============== */
+let state = {
+  user: JSON.parse(localStorage.getItem('proagent_user') || 'null'),
+  checkpoints: [],
+  selectedCheckpoint: null,
+  gps: null,
+  photoBase64: null,
+  meetingTab: 'new',
+  adminTab: 'accounts',
+  regionsCache: [],
+};
+
+/* ============== API HELPER ============== */
+async function api(action, data = {}) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // tránh CORS preflight
+    body: JSON.stringify({ action, data })
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'Lỗi không xác định');
+  return json.data;
+}
+
+function banner(elId, type, msg) {
+  document.getElementById(elId).innerHTML = msg ? `<div class="banner ${type}">${msg}</div>` : '';
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt)) return d;
+  return dt.toLocaleString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function statusLabel(s) {
+  const map = { PendingSM: 'Chờ SM duyệt', PendingSSM: 'Chờ SSM duyệt', Approved: 'Đã duyệt', RejectedSM: 'SM từ chối', RejectedSSM: 'SSM từ chối', Draft: 'Nháp' };
+  return map[s] || s;
+}
+
+/* ============== SCREEN ROUTER ============== */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+/* ============== LOGIN ============== */
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  banner('login-banner', 'err', '');
+  if (!username || !password) { banner('login-banner','err','Vui lòng nhập tài khoản và mật khẩu.'); return; }
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="loader"></span>Đang đăng nhập...';
+  try {
+    const user = await api('login', { username, password });
+    state.user = user;
+    localStorage.setItem('proagent_user', JSON.stringify(user));
+    goHome();
+  } catch (e) {
+    banner('login-banner', 'err', e.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = 'Đăng nhập';
+  }
+}
+
+function logout() {
+  state.user = null;
+  localStorage.removeItem('proagent_user');
+  showScreen('screen-login');
+}
+
+/* ============== HOME ============== */
+function goHome() {
+  if (!state.user) { showScreen('screen-login'); return; }
+  document.getElementById('home-username').innerText = state.user.full_name || state.user.username;
+  document.getElementById('home-role').innerText = roleLabel(state.user.role);
+  document.getElementById('home-admin-card').style.display = (state.user.role === 'Admin') ? 'flex' : 'none';
+  showScreen('screen-home');
+}
+
+function roleLabel(r) {
+  return { Admin: 'Quản trị viên', SA: 'Sales Agent', SM: 'Sales Manager', SSM: 'Senior Sales Manager' }[r] || r;
+}
+
+/* On load */
+window.addEventListener('DOMContentLoaded', () => { if (state.user) goHome(); });
+
+/* =========================================================
+   SITETOUR
+   ========================================================= */
+async function goSitetourList() {
+  showScreen('screen-sitetour-list');
+  banner('st-list-banner', '', '');
+  document.getElementById('st-checkpoint-list').innerHTML = '<div class="empty">Đang tải danh sách điểm...</div>';
+  try {
+    const cps = await api('getCheckpointsForUser', { username: state.user.username });
+    state.checkpoints = cps;
+    renderCheckpointList();
+  } catch (e) {
+    banner('st-list-banner', 'err', e.message);
+    document.getElementById('st-checkpoint-list').innerHTML = '';
+  }
+}
+
+function renderCheckpointList() {
+  const wrap = document.getElementById('st-checkpoint-list');
+  if (!state.checkpoints.length) {
+    wrap.innerHTML = '<div class="empty"><div class="big">📭</div>Chưa có điểm checkin nào trong vùng của bạn.</div>';
+    return;
+  }
+  wrap.innerHTML = state.checkpoints.map(cp => `
+    <div class="pick ${state.selectedCheckpoint && state.selectedCheckpoint.checkpoint_id===cp.checkpoint_id?'selected':''}" onclick="selectCheckpoint('${cp.checkpoint_id}')">
+      <div><div class="t">${cp.checkpoint_name}</div><div class="s">Bán kính cho phép ${cp.radius_m}m</div></div>
+      <div>${state.selectedCheckpoint && state.selectedCheckpoint.checkpoint_id===cp.checkpoint_id ? '✅' : ''}</div>
+    </div>`).join('');
+}
+
+function selectCheckpoint(id) {
+  state.selectedCheckpoint = state.checkpoints.find(c => c.checkpoint_id === id);
+  document.getElementById('st-continue-btn').disabled = false;
+  renderCheckpointList();
+}
+
+function goCheckinCapture() {
+  state.gps = null; state.photoBase64 = null;
+  document.getElementById('gps-dot').classList.remove('on');
+  document.getElementById('gps-coords').innerText = 'Chưa lấy vị trí';
+  document.getElementById('photo-preview').style.display = 'none';
+  document.getElementById('photo-input').value = '';
+  document.getElementById('submit-checkin-btn').disabled = true;
+  banner('st-checkin-banner', '', '');
+  document.getElementById('st-checkin-point-name').innerText = state.selectedCheckpoint.checkpoint_name;
+  showScreen('screen-sitetour-checkin');
+}
+
+function captureGPS() {
+  if (!navigator.geolocation) { banner('st-checkin-banner','err','Trình duyệt không hỗ trợ GPS.'); return; }
+  banner('st-checkin-banner','info','Đang lấy vị trí — vui lòng cho phép quyền truy cập vị trí...');
+  navigator.geolocation.getCurrentPosition(pos => {
+    state.gps = { lat: pos.coords.latitude, long: pos.coords.longitude, accuracy: pos.coords.accuracy };
+    document.getElementById('gps-dot').classList.add('on');
+    document.getElementById('gps-coords').innerText = `${state.gps.lat.toFixed(6)}, ${state.gps.long.toFixed(6)} (±${Math.round(state.gps.accuracy)}m)`;
+    banner('st-checkin-banner','','');
+    checkSubmitReady();
+  }, err => {
+    banner('st-checkin-banner','err','Không lấy được vị trí: ' + err.message + '. Vui lòng bật GPS/định vị trên thiết bị.');
+  }, { enableHighAccuracy: true, timeout: 15000 });
+}
+
+function onPhotoSelected(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    state.photoBase64 = reader.result;
+    const img = document.getElementById('photo-preview');
+    img.src = reader.result; img.style.display = 'block';
+    checkSubmitReady();
+  };
+  reader.readAsDataURL(file);
+}
+
+function checkSubmitReady() {
+  document.getElementById('submit-checkin-btn').disabled = !(state.gps && state.photoBase64);
+}
+
+async function submitCheckinNow() {
+  const btn = document.getElementById('submit-checkin-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="loader"></span>Đang gửi...';
+  try {
+    const result = await api('submitCheckin', {
+      username: state.user.username,
+      full_name: state.user.full_name,
+      checkpoint_id: state.selectedCheckpoint.checkpoint_id,
+      lat: state.gps.lat, long: state.gps.long,
+      photo_base64: state.photoBase64
+    });
+    renderStampResult(result);
+    showScreen('screen-sitetour-result');
+  } catch (e) {
+    banner('st-checkin-banner','err', e.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = 'Ghi nhận checkin';
+  }
+}
+
+function renderStampResult(result) {
+  const valid = result.valid;
+  document.getElementById('stamp-container').innerHTML = `
+    <div class="stamp ${valid?'':'invalid'}">
+      ${valid ? 'CHECKIN HỢP LỆ' : 'NGOÀI PHẠM VI'}
+      <span class="sub">${new Date().toLocaleString('vi-VN')}</span>
+    </div>
+    <div class="meta">
+      Khoảng cách tới điểm chỉ định: <b class="mono">${result.distance_m}m</b> (cho phép ${result.radius_m}m)<br>
+      Điểm: ${state.selectedCheckpoint.checkpoint_name}
+    </div>`;
+}
+
+async function goSitetourHistory() {
+  showScreen('screen-sitetour-history');
+  const wrap = document.getElementById('st-history-list');
+  wrap.innerHTML = '<div class="empty">Đang tải...</div>';
+  try {
+    const rows = await api('listCheckins', { username: state.user.username, role: state.user.role });
+    rows.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+    if (!rows.length) { wrap.innerHTML = '<div class="empty"><div class="big">📭</div>Chưa có checkin nào.</div>'; return; }
+    wrap.innerHTML = '<div class="card">' + rows.map(r => `
+      <div class="row">
+        <div class="l"><div class="t">${r.checkpoint_name}</div><div class="s">${r.sa_name || r.sa_username} · ${fmtDate(r.timestamp)}</div></div>
+        <div class="r"><span class="badge ${String(r.valid)==='true'||r.valid===true?'approved':'rejectedsm'}">${(String(r.valid)==='true'||r.valid===true)?'Hợp lệ':'Ngoài vùng'}</span><div style="margin-top:4px;">${r.distance_m}m</div></div>
+      </div>`).join('') + '</div>';
+  } catch (e) {
+    wrap.innerHTML = `<div class="banner err">${e.message}</div>`;
+  }
+}
+
+/* =========================================================
+   MEETING
+   ========================================================= */
+function goMeetingHome() {
+  const isSA = state.user.role === 'SA';
+  const isApprover = state.user.role === 'SM' || state.user.role === 'SSM';
+  const tabs = [];
+  if (isSA) tabs.push({k:'new', label:'Tạo mới'});
+  if (isApprover) tabs.push({k:'approval', label:'Chờ duyệt'});
+  tabs.push({k:'history', label:'Lịch sử'});
+  state.meetingTab = tabs[0].k;
+  document.getElementById('meeting-tabs').innerHTML = tabs.map(t =>
+    `<div class="tab ${t.k===state.meetingTab?'active':''}" data-tab="${t.k}" onclick="switchMeetingTab('${t.k}')">${t.label}</div>`).join('');
+  showScreen('screen-meeting-home');
+  renderMeetingTab();
+}
+
+function switchMeetingTab(k) {
+  state.meetingTab = k;
+  document.querySelectorAll('#meeting-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === k));
+  renderMeetingTab();
+}
+
+async function renderMeetingTab() {
+  const wrap = document.getElementById('meeting-tab-content');
+  if (state.meetingTab === 'new') {
+    goMeetingNewForm(); // navigates away to full-screen form
+    return;
+  }
+  wrap.innerHTML = '<div class="empty">Đang tải...</div>';
+  try {
+    if (state.meetingTab === 'approval') {
+      const rows = await api('listMeetingsForApproval', { username: state.user.username });
+      renderMeetingRows(wrap, rows, true);
+    } else {
+      const rows = await api('listMeetings', { username: state.user.username, role: state.user.role });
+      rows.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      renderMeetingRows(wrap, rows, false);
+    }
+  } catch (e) {
+    wrap.innerHTML = `<div class="banner err">${e.message}</div>`;
+  }
+}
+
+function renderMeetingRows(wrap, rows, isApprovalTab) {
+  if (!rows.length) { wrap.innerHTML = `<div class="empty"><div class="big">📭</div>${isApprovalTab?'Không có meeting nào chờ duyệt.':'Chưa có meeting nào.'}</div>`; return; }
+  wrap.innerHTML = '<div class="card">' + rows.map(m => `
+    <div class="row" style="cursor:pointer;" onclick="openMeetingDetail('${m.meeting_id}')">
+      <div class="l"><div class="t">${m.partner_name || '(chưa đặt tên)'}</div><div class="s">${m.sa_name || m.sa_username} · ${fmtDate(m.meeting_datetime || m.created_at)}</div></div>
+      <div class="r"><span class="badge ${String(m.status).toLowerCase()}">${statusLabel(m.status)}</span></div>
+    </div>`).join('') + '</div>';
+}
+
+async function goMeetingNewForm() {
+  showScreen('screen-meeting-new');
+  banner('mn-banner','','');
+  ['mn-partner','mn-datetime','mn-purpose','mn-attendees','mn-content','mn-result','mn-nextaction'].forEach(id => document.getElementById(id).value = '');
+  const sel = document.getElementById('mn-region');
+  sel.innerHTML = '<option>Đang tải vùng...</option>';
+  try {
+    const regions = await api('adminListRegions');
+    sel.innerHTML = regions.length
+      ? regions.map(r => `<option value="${r.region_code}">${r.region_code} — ${r.region_name}</option>`).join('')
+      : '<option value="">(chưa có vùng)</option>';
+  } catch (e) {
+    sel.innerHTML = '<option value="">(lỗi tải vùng)</option>';
+  }
+}
+
+async function submitMeetingNow() {
+  const payload = {
+    sa_username: state.user.username,
+    sa_name: state.user.full_name,
+    region_code: document.getElementById('mn-region').value,
+    partner_name: document.getElementById('mn-partner').value.trim(),
+    meeting_datetime: document.getElementById('mn-datetime').value,
+    purpose: document.getElementById('mn-purpose').value.trim(),
+    attendees: document.getElementById('mn-attendees').value.trim(),
+    content: document.getElementById('mn-content').value.trim(),
+    result: document.getElementById('mn-result').value.trim(),
+    next_action: document.getElementById('mn-nextaction').value.trim(),
+  };
+  if (!payload.partner_name || !payload.meeting_datetime) {
+    banner('mn-banner','err','Vui lòng nhập tối thiểu Đối tác và Thời gian gặp.'); return;
+  }
+  try {
+    await api('createMeeting', payload);
+    banner('mn-banner','ok','Đã gửi biên bản cho SM duyệt.');
+    setTimeout(() => { switchMeetingTab('history'); showScreen('screen-meeting-home'); }, 700);
+  } catch (e) {
+    banner('mn-banner','err', e.message);
+  }
+}
+
+let currentMeetingDetail = null;
+async function openMeetingDetail(id) {
+  showScreen('screen-meeting-detail');
+  const body = document.getElementById('meeting-detail-body');
+  body.innerHTML = '<div class="empty">Đang tải...</div>';
+  try {
+    const all = await api('listMeetings', { username: state.user.username, role: state.user.role })
+      .catch(() => api('listMeetingsForApproval', { username: state.user.username }));
+    let m = all.find(x => x.meeting_id === id);
+    if (!m) { // fallback: also check approval queue
+      const approvalRows = await api('listMeetingsForApproval', { username: state.user.username });
+      m = approvalRows.find(x => x.meeting_id === id);
+    }
+    if (!m) { body.innerHTML = '<div class="empty">Không tìm thấy meeting.</div>'; return; }
+    currentMeetingDetail = m;
+    const canApprove = (state.user.role === 'SM' && m.status === 'PendingSM') || (state.user.role === 'SSM' && m.status === 'PendingSSM');
+    body.innerHTML = `
+      <div class="card">
+        <span class="badge ${String(m.status).toLowerCase()}">${statusLabel(m.status)}</span>
+        <h2 style="margin:10px 0 2px;">${m.partner_name}</h2>
+        <div class="desc" style="margin-bottom:10px;">SA: ${m.sa_name || m.sa_username} · Vùng ${m.region_code} · ${fmtDate(m.meeting_datetime)}</div>
+        <label style="margin-top:6px;">Mục đích</label><div>${m.purpose || '—'}</div>
+        <label>Thành phần tham dự</label><div>${m.attendees || '—'}</div>
+        <label>Nội dung trao đổi</label><div>${m.content || '—'}</div>
+        <label>Kết quả</label><div>${m.result || '—'}</div>
+        <label>Hành động tiếp theo</label><div>${m.next_action || '—'}</div>
+        ${m.sm_note ? `<label>Ghi chú SM</label><div>${m.sm_note}</div>` : ''}
+        ${m.ssm_note ? `<label>Ghi chú SSM</label><div>${m.ssm_note}</div>` : ''}
+      </div>
+      ${canApprove ? `
+      <div class="card">
+        <label style="margin-top:0;">Ghi chú duyệt (không bắt buộc)</label>
+        <textarea id="approve-note"></textarea>
+        <div class="btn-row" style="margin-top:14px;">
+          <button class="btn btn-danger" onclick="doApprove('reject')">Từ chối</button>
+          <button class="btn btn-primary" onclick="doApprove('approve')">Duyệt</button>
+        </div>
+      </div>` : ''}
+    `;
+  } catch (e) {
+    body.innerHTML = `<div class="banner err">${e.message}</div>`;
+  }
+}
+
+async function doApprove(decision) {
+  const note = document.getElementById('approve-note') ? document.getElementById('approve-note').value : '';
+  try {
+    await api('approveMeeting', {
+      meeting_id: currentMeetingDetail.meeting_id,
+      approver_username: state.user.username,
+      role: state.user.role,
+      decision, note
+    });
+    goMeetingHome();
+    switchMeetingTab('approval');
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+/* =========================================================
+   ADMIN
+   ========================================================= */
+function goAdmin() { showScreen('screen-admin'); switchAdminTab('accounts'); }
+
+function switchAdminTab(tab) {
+  state.adminTab = tab;
+  document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  if (tab === 'accounts') renderAdminAccounts();
+  if (tab === 'regions') renderAdminRegions();
+  if (tab === 'checkpoints') renderAdminCheckpoints();
+}
+
+async function renderAdminAccounts() {
+  const wrap = document.getElementById('admin-tab-content');
+  wrap.innerHTML = '<div class="empty">Đang tải...</div>';
+  try {
+    const accounts = await api('adminListAccounts');
+    const formHtml = `
+      <div class="card">
+        <div class="eyebrow">Tạo tài khoản mới</div>
+        <label style="margin-top:0;">Username</label><input id="ac-username" placeholder="vd: sa.nguyenvana">
+        <label>Mật khẩu</label><input id="ac-password" type="text" placeholder="Mật khẩu ban đầu">
+        <label>Họ tên</label><input id="ac-fullname" placeholder="Nguyễn Văn A">
+        <label>Vai trò</label>
+        <select id="ac-role" onchange="toggleAccountFields()">
+          <option value="SA">SA — Sales Agent</option>
+          <option value="SM">SM — Sales Manager</option>
+          <option value="SSM">SSM — Senior Sales Manager</option>
+          <option value="Admin">Admin</option>
+        </select>
+        <div id="ac-manager-field">
+          <label>Quản lý trực tiếp (username SM)</label>
+          <input id="ac-manager" placeholder="username của SM quản lý SA này">
+        </div>
+        <div id="ac-region-field" style="display:none;">
+          <label>Vùng phụ trách (mã vùng, phân cách dấu phẩy)</label>
+          <input id="ac-regions" placeholder="vd: V10,V16">
+        </div>
+        <button class="btn btn-primary" style="margin-top:16px;" onclick="createAccount()">Tạo tài khoản</button>
+        <div id="ac-banner"></div>
+      </div>`;
+    const listHtml = '<div class="card">' + accounts.map(a => `
+      <div class="row">
+        <div class="l"><div class="t">${a.full_name} <span class="mono" style="color:var(--slate);font-size:11px;">@${a.username}</span></div>
+          <div class="s">${roleLabel(a.role)}${a.manager_username ? ' · QL bởi ' + a.manager_username : ''}${a.region_codes ? ' · Vùng ' + a.region_codes : ''}</div></div>
+        <div class="r">
+          <span class="badge ${String(a.active).toUpperCase()==='TRUE' ? 'approved':'rejectedsm'}">${String(a.active).toUpperCase()==='TRUE'?'Active':'Khóa'}</span><br>
+          <button class="btn btn-ghost" style="padding:6px 0;" onclick="toggleAccountActive('${a.username}', ${String(a.active).toUpperCase()!=='TRUE'})">${String(a.active).toUpperCase()==='TRUE'?'Khóa':'Mở lại'}</button>
+        </div>
+      </div>`).join('') + '</div>';
+    wrap.innerHTML = formHtml + listHtml;
+    toggleAccountFields();
+  } catch (e) {
+    wrap.innerHTML = `<div class="banner err">${e.message}</div>`;
+  }
+}
+
+function toggleAccountFields() {
+  const role = document.getElementById('ac-role').value;
+  document.getElementById('ac-manager-field').style.display = (role === 'SA' || role === 'SM') ? 'block' : 'none';
+  document.getElementById('ac-region-field').style.display = (role === 'SM') ? 'block' : 'none';
+}
+
+async function createAccount() {
+  const payload = {
+    username: document.getElementById('ac-username').value.trim(),
+    password: document.getElementById('ac-password').value,
+    full_name: document.getElementById('ac-fullname').value.trim(),
+    role: document.getElementById('ac-role').value,
+    manager_username: document.getElementById('ac-manager') ? document.getElementById('ac-manager').value.trim() : '',
+    region_codes: document.getElementById('ac-regions') ? document.getElementById('ac-regions').value.trim() : '',
+  };
+  if (!payload.username || !payload.password || !payload.full_name) {
+    banner('ac-banner','err','Vui lòng nhập đủ Username, Mật khẩu, Họ tên.'); return;
+  }
+  try {
+    await api('adminCreateAccount', payload);
+    banner('ac-banner','ok','Đã tạo tài khoản.');
+    setTimeout(renderAdminAccounts, 500);
+  } catch (e) {
+    banner('ac-banner','err', e.message);
+  }
+}
+
+async function toggleAccountActive(username, active) {
+  try { await api('adminSetAccountActive', { username, active }); renderAdminAccounts(); }
+  catch (e) { alert(e.message); }
+}
+
+async function renderAdminRegions() {
+  const wrap = document.getElementById('admin-tab-content');
+  wrap.innerHTML = '<div class="empty">Đang tải...</div>';
+  try {
+    const regions = await api('adminListRegions');
+    state.regionsCache = regions;
+    const formHtml = `
+      <div class="card">
+        <div class="eyebrow">Tạo vùng mới</div>
+        <label style="margin-top:0;">Mã vùng</label><input id="rg-code" placeholder="vd: V10">
+        <label>Tên vùng</label><input id="rg-name" placeholder="vd: Vùng 10 - Quận 7">
+        <label>Username SM phụ trách</label><input id="rg-sm" placeholder="username SM">
+        <button class="btn btn-primary" style="margin-top:16px;" onclick="createRegion()">Tạo vùng</button>
+        <div id="rg-banner"></div>
+      </div>`;
+    const listHtml = '<div class="card">' + (regions.length ? regions.map(r => `
+      <div class="row"><div class="l"><div class="t">${r.region_name}</div><div class="s mono">${r.region_code} · SM: ${r.sm_username || '—'}</div></div></div>`).join('')
+      : '<div class="empty">Chưa có vùng nào.</div>') + '</div>';
+    wrap.innerHTML = formHtml + listHtml;
+  } catch (e) { wrap.innerHTML = `<div class="banner err">${e.message}</div>`; }
+}
+
+async function createRegion() {
+  const payload = { region_code: document.getElementById('rg-code').value.trim(), region_name: document.getElementById('rg-name').value.trim(), sm_username: document.getElementById('rg-sm').value.trim() };
+  if (!payload.region_code || !payload.region_name) { banner('rg-banner','err','Nhập Mã vùng và Tên vùng.'); return; }
+  try { await api('adminCreateRegion', payload); banner('rg-banner','ok','Đã tạo vùng.'); setTimeout(renderAdminRegions, 500); }
+  catch (e) { banner('rg-banner','err', e.message); }
+}
+
+async function renderAdminCheckpoints() {
+  const wrap = document.getElementById('admin-tab-content');
+  wrap.innerHTML = '<div class="empty">Đang tải...</div>';
+  try {
+    const cps = await api('adminListCheckpoints');
+    const formHtml = `
+      <div class="card">
+        <div class="eyebrow">Tạo điểm checkin mới</div>
+        <div class="hint" style="margin-bottom:10px;">Điểm checkin áp dụng chung cho toàn bộ sales, không chia theo vùng.</div>
+        <label style="margin-top:0;">Tên điểm</label><input id="cp-name" placeholder="vd: Sales Gallery Masterise">
+        <label>Latitude</label><input id="cp-lat" type="number" step="0.000001" placeholder="vd: 10.8030065">
+        <label>Longitude</label><input id="cp-long" type="number" step="0.000001" placeholder="vd: 106.7767749">
+        <label>Bán kính cho phép (m)</label><input id="cp-radius" type="number" value="100">
+        <div class="hint">Mẹo: mở Google Maps, giữ ghim tại điểm cần checkin để lấy tọa độ chính xác.</div>
+        <button class="btn btn-primary" style="margin-top:16px;" onclick="createCheckpoint()">Tạo điểm checkin</button>
+        <div id="cp-banner"></div>
+      </div>`;
+    const listHtml = '<div class="card">' + (cps.length ? cps.map(c => `
+      <div class="row"><div class="l"><div class="t">${c.checkpoint_name}</div><div class="s mono">${Number(c.lat).toFixed(5)}, ${Number(c.long).toFixed(5)} · r=${c.radius_m}m</div></div></div>`).join('')
+      : '<div class="empty">Chưa có điểm checkin nào.</div>') + '</div>';
+    wrap.innerHTML = formHtml + listHtml;
+  } catch (e) { wrap.innerHTML = `<div class="banner err">${e.message}</div>`; }
+}
+
+async function createCheckpoint() {
+  const payload = {
+    checkpoint_name: document.getElementById('cp-name').value.trim(),
+    lat: document.getElementById('cp-lat').value,
+    long: document.getElementById('cp-long').value,
+    radius_m: document.getElementById('cp-radius').value || 100,
+  };
+  if (!payload.checkpoint_name || !payload.lat || !payload.long) { banner('cp-banner','err','Nhập đủ Tên điểm, Latitude, Longitude.'); return; }
+  try { await api('adminCreateCheckpoint', payload); banner('cp-banner','ok','Đã tạo điểm checkin.'); setTimeout(renderAdminCheckpoints, 500); }
+  catch (e) { banner('cp-banner','err', e.message); }
+}
+</script>
+</body>
+</html>
