@@ -321,6 +321,7 @@
       <textarea id="mn-nextaction" placeholder="Việc cần làm, người phụ trách, thời hạn..."></textarea>
 
       <button class="btn btn-primary" style="margin-top:22px;" onclick="submitMeetingNow()">Gửi duyệt</button>
+      <button class="btn btn-ghost" onclick="goHome()">Quay về trang chủ</button>
     </div>
   </div>
 
@@ -621,7 +622,12 @@ function switchMeetingTab(k) {
 async function renderMeetingTab() {
   const wrap = document.getElementById('meeting-tab-content');
   if (state.meetingTab === 'new') {
-    goMeetingNewForm(); // navigates away to full-screen form
+    wrap.innerHTML = `
+      <div class="tap-card" onclick="goMeetingNewForm()">
+        <div class="icon amber">📝</div>
+        <div><div class="t">Tạo meeting mới</div><div class="d">Điền Meeting Minutes & gửi duyệt</div></div>
+        <div class="chev">›</div>
+      </div>`;
     return;
   }
   wrap.innerHTML = '<div class="empty">Đang tải...</div>';
