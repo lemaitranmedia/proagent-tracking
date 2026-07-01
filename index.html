@@ -249,7 +249,7 @@
   <div class="screen" id="screen-meeting-home">
     <div class="topbar">
       <button class="back" onclick="goHome()">‹</button>
-      <div class="brand"><span class="name">MEETING</span><span class="sub">Biên bản gặp đối tác</span></div>
+      <div class="brand"><span class="name">MEETING</span><span class="sub">Biên bản làm việc</span></div>
       <span></span>
     </div>
     <div style="padding-top:18px;">
@@ -267,20 +267,49 @@
     </div>
     <div style="padding-top:18px;">
       <div id="mn-banner"></div>
-      <label style="margin-top:0;">Vùng kinh doanh</label>
-      <select id="mn-region"></select>
 
-      <label>Đối tác / Khách hàng</label>
-      <input id="mn-partner" placeholder="Tên đối tác">
+      <div class="card" style="padding:13px 16px;">
+        <div class="eyebrow" style="margin-bottom:2px;">Mã meeting</div>
+        <div class="mono" id="mn-code" style="font-size:15px;font-weight:600;color:var(--ink);"></div>
+      </div>
 
-      <label>Thời gian gặp</label>
-      <input id="mn-datetime" type="datetime-local">
+      <label style="margin-top:0;">Cấp độ meeting</label>
+      <select id="mn-level" onchange="onMeetingLevelChange()">
+        <option value="region">Cấp Vùng</option>
+        <option value="branch">Cấp Chi nhánh</option>
+      </select>
+
+      <div id="mn-region-field">
+        <label>Vùng kinh doanh</label>
+        <select id="mn-region"></select>
+      </div>
+
+      <div id="mn-branch-field" style="display:none;">
+        <label>Chi nhánh (có thể chọn nhiều)</label>
+        <div class="card" id="mn-branch-list" style="max-height:220px;overflow-y:auto;"></div>
+      </div>
+
+      <label>Ngày họp</label>
+      <input id="mn-date" type="date">
+      <div class="btn-row" style="margin-top:10px;">
+        <div style="flex:1;">
+          <label style="margin-top:0;">Giờ bắt đầu</label>
+          <input id="mn-start-time" type="time">
+        </div>
+        <div style="flex:1;">
+          <label style="margin-top:0;">Giờ kết thúc</label>
+          <input id="mn-end-time" type="time">
+        </div>
+      </div>
 
       <label>Mục đích cuộc họp</label>
-      <textarea id="mn-purpose" placeholder="Mục đích, bối cảnh buổi gặp..."></textarea>
+      <select id="mn-purpose-type" onchange="onPurposeTypeChange()"></select>
+      <div id="mn-purpose-other-field" style="display:none;">
+        <textarea id="mn-purpose-other" placeholder="Nhập mục đích cụ thể..." style="margin-top:8px;"></textarea>
+      </div>
 
       <label>Thành phần tham dự</label>
-      <textarea id="mn-attendees" placeholder="Tên, chức danh các bên tham dự..."></textarea>
+      <div class="card" id="mn-attendees-list"></div>
 
       <label>Nội dung trao đổi</label>
       <textarea id="mn-content" placeholder="Tóm tắt nội dung đã trao đổi..."></textarea>
@@ -291,7 +320,7 @@
       <label>Hành động tiếp theo</label>
       <textarea id="mn-nextaction" placeholder="Việc cần làm, người phụ trách, thời hạn..."></textarea>
 
-      <button class="btn btn-primary" style="margin-top:22px;" onclick="submitMeetingNow()">Gửi cho SM duyệt</button>
+      <button class="btn btn-primary" style="margin-top:22px;" onclick="submitMeetingNow()">Gửi duyệt</button>
     </div>
   </div>
 
@@ -309,13 +338,14 @@
   <div class="screen" id="screen-admin">
     <div class="topbar">
       <button class="back" onclick="goHome()">‹</button>
-      <div class="brand"><span class="name">QUẢN TRỊ</span><span class="sub">Accounts · Vùng · Checkpoint</span></div>
+      <div class="brand"><span class="name">QUẢN TRỊ</span><span class="sub">Accounts · Vùng · Chi nhánh · Checkpoint</span></div>
       <span></span>
     </div>
     <div style="padding-top:18px;">
       <div class="tabs" id="admin-tabs">
         <div class="tab active" data-tab="accounts" onclick="switchAdminTab('accounts')">Tài khoản</div>
         <div class="tab" data-tab="regions" onclick="switchAdminTab('regions')">Vùng</div>
+        <div class="tab" data-tab="branches" onclick="switchAdminTab('branches')">Chi nhánh</div>
         <div class="tab" data-tab="checkpoints" onclick="switchAdminTab('checkpoints')">Checkpoint</div>
       </div>
       <div id="admin-tab-content"></div>
@@ -330,6 +360,20 @@
    ========================================================= */
 const API_URL = "https://script.google.com/macros/s/AKfycbxnsG0tf_r2lOVsi3O_ybpqkfZfMaSGFB5XbZoxBTjkd-USDi1aehwe3LcQqXCla8dxGw/exec";
 
+/* Shortlist mục đích cuộc họp — chỉnh trực tiếp tại đây nếu cần thêm/bớt.
+   "Khác" luôn phải là phần tử cuối cùng — bắt buộc nhập nội dung khi chọn. */
+const MEETING_PURPOSES = [
+  'Giới thiệu sản phẩm/dự án mới',
+  'Đào tạo nghiệp vụ/quy trình',
+  'Trao đổi định kỳ tình hình kinh doanh',
+  'Xử lý vấn đề phát sinh/khiếu nại',
+  'Ký kết hợp tác/thỏa thuận',
+  'Khác'
+];
+
+/* Shortlist thành phần tham dự — chỉnh trực tiếp tại đây nếu cần thêm/bớt. */
+const ATTENDEE_ROLES = ['Lãnh đạo Chi nhánh','Lãnh đạo Vùng','PRM','SD','SM','SSM','SA','PNS','BD Miền','BD Vùng'];
+
 /* ============== STATE ============== */
 let state = {
   user: JSON.parse(localStorage.getItem('proagent_user') || 'null'),
@@ -340,6 +384,8 @@ let state = {
   meetingTab: 'new',
   adminTab: 'accounts',
   regionsCache: [],
+  branchesCache: [],
+  resubmitFrom: null, // meeting_id của bản bị từ chối đang được sửa & gửi lại
 };
 
 /* ============== API HELPER ============== */
@@ -553,12 +599,12 @@ async function goSitetourHistory() {
    MEETING
    ========================================================= */
 function goMeetingHome() {
-  const isSA = state.user.role === 'SA';
+  const isCreator = state.user.role === 'SA' || state.user.role === 'SM';
   const isApprover = state.user.role === 'SM' || state.user.role === 'SSM';
   const tabs = [];
-  if (isSA) tabs.push({k:'new', label:'Tạo mới'});
+  if (isCreator) tabs.push({k:'new', label:'Tạo meeting'});
   if (isApprover) tabs.push({k:'approval', label:'Chờ duyệt'});
-  tabs.push({k:'history', label:'Lịch sử'});
+  tabs.push({k:'history', label:'Lịch sử duyệt'});
   state.meetingTab = tabs[0].k;
   document.getElementById('meeting-tabs').innerHTML = tabs.map(t =>
     `<div class="tab ${t.k===state.meetingTab?'active':''}" data-tab="${t.k}" onclick="switchMeetingTab('${t.k}')">${t.label}</div>`).join('');
@@ -593,50 +639,137 @@ async function renderMeetingTab() {
   }
 }
 
+function meetingTitle(m) {
+  return m.purpose_type === 'Khác' ? (m.purpose_other || 'Khác') : (m.purpose_type || '(chưa có mục đích)');
+}
+function meetingScopeLabel(m) {
+  return m.level === 'branch' ? `Chi nhánh: ${m.branch_codes || '—'}` : `Vùng: ${m.region_code || '—'}`;
+}
+
 function renderMeetingRows(wrap, rows, isApprovalTab) {
   if (!rows.length) { wrap.innerHTML = `<div class="empty"><div class="big">📭</div>${isApprovalTab?'Không có meeting nào chờ duyệt.':'Chưa có meeting nào.'}</div>`; return; }
   wrap.innerHTML = '<div class="card">' + rows.map(m => `
     <div class="row" style="cursor:pointer;" onclick="openMeetingDetail('${m.meeting_id}')">
-      <div class="l"><div class="t">${m.partner_name || '(chưa đặt tên)'}</div><div class="s">${m.sa_name || m.sa_username} · ${fmtDate(m.meeting_datetime || m.created_at)}</div></div>
+      <div class="l"><div class="t mono" style="font-size:12px;color:var(--slate);">${m.meeting_code || m.meeting_id}</div>
+        <div class="t">${meetingTitle(m)}</div>
+        <div class="s">${m.creator_name || m.creator_username} · ${meetingScopeLabel(m)} · ${fmtDate(m.meeting_date || m.created_at)}</div></div>
       <div class="r"><span class="badge ${String(m.status).toLowerCase()}">${statusLabel(m.status)}</span></div>
     </div>`).join('') + '</div>';
 }
 
-async function goMeetingNewForm() {
+async function goMeetingNewForm(prefill) {
   showScreen('screen-meeting-new');
   banner('mn-banner','','');
-  ['mn-partner','mn-datetime','mn-purpose','mn-attendees','mn-content','mn-result','mn-nextaction'].forEach(id => document.getElementById(id).value = '');
-  const sel = document.getElementById('mn-region');
-  sel.innerHTML = '<option>Đang tải vùng...</option>';
+  state.resubmitFrom = prefill ? prefill.meeting_id : null;
+
+  // Sinh mã meeting mới ngay khi mở form
+  document.getElementById('mn-code').innerText = genMeetingCode();
+
+  if (prefill) {
+    banner('mn-banner','info',`Đang tạo lại từ meeting bị từ chối <b>${prefill.meeting_code || prefill.meeting_id}</b> — thông tin cũ đã được điền sẵn, chị chỉ cần chỉnh sửa phần cần thiết.`);
+  }
+
+  document.getElementById('mn-level').value = prefill ? prefill.level : 'region';
+  document.getElementById('mn-date').value = prefill ? prefill.meeting_date : '';
+  document.getElementById('mn-start-time').value = prefill ? prefill.start_time : '';
+  document.getElementById('mn-end-time').value = prefill ? prefill.end_time : '';
+  document.getElementById('mn-content').value = prefill ? (prefill.content || '') : '';
+  document.getElementById('mn-result').value = prefill ? (prefill.result || '') : '';
+  document.getElementById('mn-nextaction').value = prefill ? (prefill.next_action || '') : '';
+
+  // Mục đích cuộc họp
+  const purSel = document.getElementById('mn-purpose-type');
+  purSel.innerHTML = MEETING_PURPOSES.map(p => `<option value="${p}">${p}</option>`).join('');
+  purSel.value = prefill && prefill.purpose_type ? prefill.purpose_type : MEETING_PURPOSES[0];
+  document.getElementById('mn-purpose-other').value = prefill ? (prefill.purpose_other || '') : '';
+  onPurposeTypeChange();
+
+  // Thành phần tham dự
+  const selectedAttendees = prefill ? String(prefill.attendees || '').split(',').map(s=>s.trim()).filter(Boolean) : [];
+  document.getElementById('mn-attendees-list').innerHTML = ATTENDEE_ROLES.map((role, i) => `
+    <label style="display:flex;align-items:center;gap:8px;margin:${i===0?'0':'10px'} 0 0;font-weight:400;">
+      <input type="checkbox" value="${role}" ${selectedAttendees.includes(role)?'checked':''} style="width:auto;" class="mn-attendee-cb"> ${role}
+    </label>`).join('');
+
+  // Vùng + Chi nhánh
   try {
-    const regions = await api('adminListRegions');
-    sel.innerHTML = regions.length
+    const [regions, branches] = await Promise.all([api('adminListRegions'), api('adminListBranches')]);
+    state.regionsCache = regions; state.branchesCache = branches;
+
+    const regionSel = document.getElementById('mn-region');
+    regionSel.innerHTML = regions.length
       ? regions.map(r => `<option value="${r.region_code}">${r.region_code} — ${r.region_name}</option>`).join('')
       : '<option value="">(chưa có vùng)</option>';
+    if (prefill && prefill.level !== 'branch') regionSel.value = prefill.region_code;
+
+    const selectedBranches = prefill ? String(prefill.branch_codes || '').split(',').map(s=>s.trim()).filter(Boolean) : [];
+    document.getElementById('mn-branch-list').innerHTML = branches.length
+      ? branches.map((b,i) => `
+        <label style="display:flex;align-items:center;gap:8px;margin:${i===0?'0':'10px'} 0 0;font-weight:400;">
+          <input type="checkbox" value="${b.branch_code}" ${selectedBranches.includes(b.branch_code)?'checked':''} style="width:auto;" class="mn-branch-cb"> ${b.branch_name} <span class="mono" style="color:var(--slate);font-size:11px;">(${b.region_code})</span>
+        </label>`).join('')
+      : '<div class="empty" style="padding:14px;">Chưa có chi nhánh nào — tạo trong Quản trị.</div>';
   } catch (e) {
-    sel.innerHTML = '<option value="">(lỗi tải vùng)</option>';
+    banner('mn-banner','err', e.message);
   }
+
+  onMeetingLevelChange();
+}
+
+function genMeetingCode() {
+  const d = new Date();
+  const ymd = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+  const rand = Math.random().toString(36).slice(2,6).toUpperCase();
+  return `MTG-${ymd}-${rand}`;
+}
+
+function onMeetingLevelChange() {
+  const level = document.getElementById('mn-level').value;
+  document.getElementById('mn-region-field').style.display = level === 'region' ? 'block' : 'none';
+  document.getElementById('mn-branch-field').style.display = level === 'branch' ? 'block' : 'none';
+}
+
+function onPurposeTypeChange() {
+  const isOther = document.getElementById('mn-purpose-type').value === 'Khác';
+  document.getElementById('mn-purpose-other-field').style.display = isOther ? 'block' : 'none';
 }
 
 async function submitMeetingNow() {
+  const level = document.getElementById('mn-level').value;
+  const attendees = Array.from(document.querySelectorAll('.mn-attendee-cb:checked')).map(el => el.value).join(',');
+  const branchCodes = Array.from(document.querySelectorAll('.mn-branch-cb:checked')).map(el => el.value).join(',');
+  const purposeType = document.getElementById('mn-purpose-type').value;
+  const purposeOther = document.getElementById('mn-purpose-other').value.trim();
+
   const payload = {
-    sa_username: state.user.username,
-    sa_name: state.user.full_name,
-    region_code: document.getElementById('mn-region').value,
-    partner_name: document.getElementById('mn-partner').value.trim(),
-    meeting_datetime: document.getElementById('mn-datetime').value,
-    purpose: document.getElementById('mn-purpose').value.trim(),
-    attendees: document.getElementById('mn-attendees').value.trim(),
+    creator_username: state.user.username,
+    meeting_code: document.getElementById('mn-code').innerText,
+    level,
+    region_code: level === 'region' ? document.getElementById('mn-region').value : '',
+    branch_codes: level === 'branch' ? branchCodes : '',
+    meeting_date: document.getElementById('mn-date').value,
+    start_time: document.getElementById('mn-start-time').value,
+    end_time: document.getElementById('mn-end-time').value,
+    purpose_type: purposeType,
+    purpose_other: purposeOther,
+    attendees,
     content: document.getElementById('mn-content').value.trim(),
     result: document.getElementById('mn-result').value.trim(),
     next_action: document.getElementById('mn-nextaction').value.trim(),
+    resubmitted_from: state.resubmitFrom || ''
   };
-  if (!payload.partner_name || !payload.meeting_datetime) {
-    banner('mn-banner','err','Vui lòng nhập tối thiểu Đối tác và Thời gian gặp.'); return;
+
+  if (!payload.meeting_date || !payload.start_time || !payload.end_time) {
+    banner('mn-banner','err','Vui lòng nhập đủ Ngày họp, Giờ bắt đầu và Giờ kết thúc.'); return;
   }
+  if (level === 'region' && !payload.region_code) { banner('mn-banner','err','Vui lòng chọn Vùng kinh doanh.'); return; }
+  if (level === 'branch' && !branchCodes) { banner('mn-banner','err','Vui lòng chọn ít nhất 1 Chi nhánh.'); return; }
+  if (purposeType === 'Khác' && !purposeOther) { banner('mn-banner','err','Vui lòng nhập nội dung cho mục đích "Khác".'); return; }
+
   try {
     await api('createMeeting', payload);
-    banner('mn-banner','ok','Đã gửi biên bản cho SM duyệt.');
+    banner('mn-banner','ok','Đã gửi biên bản đi duyệt.');
+    state.resubmitFrom = null;
     setTimeout(() => { switchMeetingTab('history'); showScreen('screen-meeting-home'); }, 700);
   } catch (e) {
     banner('mn-banner','err', e.message);
@@ -649,28 +782,29 @@ async function openMeetingDetail(id) {
   const body = document.getElementById('meeting-detail-body');
   body.innerHTML = '<div class="empty">Đang tải...</div>';
   try {
-    const all = await api('listMeetings', { username: state.user.username, role: state.user.role })
-      .catch(() => api('listMeetingsForApproval', { username: state.user.username }));
-    let m = all.find(x => x.meeting_id === id);
-    if (!m) { // fallback: also check approval queue
+    const historyRows = await api('listMeetings', { username: state.user.username, role: state.user.role });
+    let m = historyRows.find(x => x.meeting_id === id);
+    if (!m) { // fallback: cũng có thể đang nằm trong hàng chờ duyệt
       const approvalRows = await api('listMeetingsForApproval', { username: state.user.username });
       m = approvalRows.find(x => x.meeting_id === id);
     }
     if (!m) { body.innerHTML = '<div class="empty">Không tìm thấy meeting.</div>'; return; }
     currentMeetingDetail = m;
     const canApprove = (state.user.role === 'SM' && m.status === 'PendingSM') || (state.user.role === 'SSM' && m.status === 'PendingSSM');
+    const canResubmit = (m.status === 'RejectedSM' || m.status === 'RejectedSSM') && m.creator_username === state.user.username;
     body.innerHTML = `
       <div class="card">
         <span class="badge ${String(m.status).toLowerCase()}">${statusLabel(m.status)}</span>
-        <h2 style="margin:10px 0 2px;">${m.partner_name}</h2>
-        <div class="desc" style="margin-bottom:10px;">SA: ${m.sa_name || m.sa_username} · Vùng ${m.region_code} · ${fmtDate(m.meeting_datetime)}</div>
-        <label style="margin-top:6px;">Mục đích</label><div>${m.purpose || '—'}</div>
-        <label>Thành phần tham dự</label><div>${m.attendees || '—'}</div>
+        <div class="mono" style="color:var(--slate);font-size:12px;margin-top:8px;">${m.meeting_code || m.meeting_id}</div>
+        <h2 style="margin:4px 0 2px;">${meetingTitle(m)}</h2>
+        <div class="desc" style="margin-bottom:10px;">${m.creator_name || m.creator_username} (${roleLabel(m.creator_role)}) · ${meetingScopeLabel(m)}<br>${fmtDate(m.meeting_date)} · ${m.start_time || '—'}–${m.end_time || '—'}</div>
+        <label style="margin-top:6px;">Thành phần tham dự</label><div>${m.attendees ? m.attendees.split(',').join(', ') : '—'}</div>
         <label>Nội dung trao đổi</label><div>${m.content || '—'}</div>
         <label>Kết quả</label><div>${m.result || '—'}</div>
         <label>Hành động tiếp theo</label><div>${m.next_action || '—'}</div>
         ${m.sm_note ? `<label>Ghi chú SM</label><div>${m.sm_note}</div>` : ''}
         ${m.ssm_note ? `<label>Ghi chú SSM</label><div>${m.ssm_note}</div>` : ''}
+        ${m.resubmitted_from ? `<div class="hint" style="margin-top:10px;">Được tạo lại từ meeting <span class="mono">${m.resubmitted_from}</span></div>` : ''}
       </div>
       ${canApprove ? `
       <div class="card">
@@ -681,6 +815,8 @@ async function openMeetingDetail(id) {
           <button class="btn btn-primary" onclick="doApprove('approve')">Duyệt</button>
         </div>
       </div>` : ''}
+      ${canResubmit ? `
+      <button class="btn btn-amber" onclick="goMeetingNewForm(currentMeetingDetail)">Sửa & gửi lại</button>` : ''}
     `;
   } catch (e) {
     body.innerHTML = `<div class="banner err">${e.message}</div>`;
@@ -713,6 +849,7 @@ function switchAdminTab(tab) {
   document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   if (tab === 'accounts') renderAdminAccounts();
   if (tab === 'regions') renderAdminRegions();
+  if (tab === 'branches') renderAdminBranchesTab();
   if (tab === 'checkpoints') renderAdminCheckpoints();
 }
 
@@ -735,8 +872,9 @@ async function renderAdminAccounts() {
           <option value="Admin">Admin</option>
         </select>
         <div id="ac-manager-field">
-          <label>Quản lý trực tiếp (username SM)</label>
-          <input id="ac-manager" placeholder="username của SM quản lý SA này">
+          <label id="ac-manager-label">Quản lý trực tiếp</label>
+          <select id="ac-manager"></select>
+          <div class="hint" id="ac-manager-hint"></div>
         </div>
         <div id="ac-region-field" style="display:none;">
           <label>Vùng phụ trách (mã vùng, phân cách dấu phẩy)</label>
@@ -755,16 +893,32 @@ async function renderAdminAccounts() {
         </div>
       </div>`).join('') + '</div>';
     wrap.innerHTML = formHtml + listHtml;
+    adminAccountsCache = accounts;
     toggleAccountFields();
   } catch (e) {
     wrap.innerHTML = `<div class="banner err">${e.message}</div>`;
   }
 }
 
+// Phân cấp cố định: SSM > SM > SA. SM chỉ report cho SSM (không report cho SM khác).
+// SA chỉ report cho đúng 1 SM.
+let adminAccountsCache = [];
+
 function toggleAccountFields() {
   const role = document.getElementById('ac-role').value;
-  document.getElementById('ac-manager-field').style.display = (role === 'SA' || role === 'SM') ? 'block' : 'none';
+  const showManager = (role === 'SA' || role === 'SM');
+  document.getElementById('ac-manager-field').style.display = showManager ? 'block' : 'none';
   document.getElementById('ac-region-field').style.display = (role === 'SM') ? 'block' : 'none';
+  if (!showManager) return;
+
+  const managerRole = role === 'SA' ? 'SM' : 'SSM';
+  const candidates = adminAccountsCache.filter(a => a.role === managerRole && String(a.active).toUpperCase() === 'TRUE');
+  document.getElementById('ac-manager-label').innerText = role === 'SA' ? 'SM quản lý trực tiếp' : 'SSM quản lý trực tiếp';
+  document.getElementById('ac-manager-hint').innerText = candidates.length ? '' : `Chưa có tài khoản ${managerRole} nào — tạo ${managerRole} trước khi tạo ${role}.`;
+  const sel = document.getElementById('ac-manager');
+  sel.innerHTML = candidates.length
+    ? candidates.map(a => `<option value="${a.username}">${a.full_name} (@${a.username})</option>`).join('')
+    : '<option value="">—</option>';
 }
 
 async function createAccount() {
@@ -820,6 +974,39 @@ async function createRegion() {
   if (!payload.region_code || !payload.region_name) { banner('rg-banner','err','Nhập Mã vùng và Tên vùng.'); return; }
   try { await api('adminCreateRegion', payload); banner('rg-banner','ok','Đã tạo vùng.'); setTimeout(renderAdminRegions, 500); }
   catch (e) { banner('rg-banner','err', e.message); }
+}
+
+async function renderAdminBranchesTab() {
+  const wrap = document.getElementById('admin-tab-content');
+  wrap.innerHTML = '<div class="empty">Đang tải...</div>';
+  try {
+    const [branches, regions] = await Promise.all([api('adminListBranches'), api('adminListRegions')]);
+    const formHtml = `
+      <div class="card">
+        <div class="eyebrow">Tạo chi nhánh mới</div>
+        <label style="margin-top:0;">Mã chi nhánh</label><input id="br-code" placeholder="vd: CN01 (để trống sẽ tự sinh)">
+        <label>Tên chi nhánh</label><input id="br-name" placeholder="vd: Chi nhánh Quận 7">
+        <label>Thuộc Vùng</label>
+        <select id="br-region">${regions.map(r => `<option value="${r.region_code}">${r.region_code} — ${r.region_name}</option>`).join('') || '<option value="">(chưa có vùng)</option>'}</select>
+        <button class="btn btn-primary" style="margin-top:16px;" onclick="createBranch()">Tạo chi nhánh</button>
+        <div id="br-banner"></div>
+      </div>`;
+    const listHtml = '<div class="card">' + (branches.length ? branches.map(b => `
+      <div class="row"><div class="l"><div class="t">${b.branch_name}</div><div class="s mono">${b.branch_code} · Vùng ${b.region_code}</div></div></div>`).join('')
+      : '<div class="empty">Chưa có chi nhánh nào.</div>') + '</div>';
+    wrap.innerHTML = formHtml + listHtml;
+  } catch (e) { wrap.innerHTML = `<div class="banner err">${e.message}</div>`; }
+}
+
+async function createBranch() {
+  const payload = {
+    branch_code: document.getElementById('br-code').value.trim(),
+    branch_name: document.getElementById('br-name').value.trim(),
+    region_code: document.getElementById('br-region').value,
+  };
+  if (!payload.branch_name || !payload.region_code) { banner('br-banner','err','Nhập Tên chi nhánh và chọn Vùng.'); return; }
+  try { await api('adminCreateBranch', payload); banner('br-banner','ok','Đã tạo chi nhánh.'); setTimeout(renderAdminBranchesTab, 500); }
+  catch (e) { banner('br-banner','err', e.message); }
 }
 
 async function renderAdminCheckpoints() {
