@@ -697,15 +697,16 @@ async function goMeetingNewForm(prefill) {
       <input type="checkbox" value="${role}" ${selectedAttendees.includes(role)?'checked':''} style="width:auto;" class="mn-attendee-cb"> ${role}
     </label>`).join('');
 
-  // Vùng + Chi nhánh
+  // Vùng + Chi nhánh — chỉ lấy đúng phạm vi được gán cho user này (không lộ toàn bộ database)
   try {
-    const [regions, branches] = await Promise.all([api('adminListRegions'), api('adminListBranches')]);
+    const scope = await api('getMeetingScopeForUser', { username: state.user.username });
+    const regions = scope.regions; const branches = scope.branches;
     state.regionsCache = regions; state.branchesCache = branches;
 
     const regionSel = document.getElementById('mn-region');
     regionSel.innerHTML = regions.length
       ? regions.map(r => `<option value="${r.region_code}">${r.region_code} — ${r.region_name}</option>`).join('')
-      : '<option value="">(chưa có vùng)</option>';
+      : '<option value="">(chưa được gán vùng nào)</option>';
     if (prefill && prefill.level !== 'branch') regionSel.value = prefill.region_code;
 
     const selectedBranches = prefill ? String(prefill.branch_codes || '').split(',').map(s=>s.trim()).filter(Boolean) : [];
@@ -714,7 +715,7 @@ async function goMeetingNewForm(prefill) {
         <label style="display:flex;align-items:center;gap:8px;margin:${i===0?'0':'10px'} 0 0;font-weight:400;">
           <input type="checkbox" value="${b.branch_code}" ${selectedBranches.includes(b.branch_code)?'checked':''} style="width:auto;" class="mn-branch-cb"> ${b.branch_name} <span class="mono" style="color:var(--slate);font-size:11px;">(${b.region_code})</span>
         </label>`).join('')
-      : '<div class="empty" style="padding:14px;">Chưa có chi nhánh nào — tạo trong Quản trị.</div>';
+      : '<div class="empty" style="padding:14px;">Chưa có chi nhánh nào trong phạm vi vùng được gán.</div>';
   } catch (e) {
     banner('mn-banner','err', e.message);
   }
@@ -883,8 +884,9 @@ async function renderAdminAccounts() {
           <div class="hint" id="ac-manager-hint"></div>
         </div>
         <div id="ac-region-field" style="display:none;">
-          <label>Vùng phụ trách (mã vùng, phân cách dấu phẩy)</label>
+          <label id="ac-region-label">Vùng phụ trách (mã vùng, phân cách dấu phẩy)</label>
           <input id="ac-regions" placeholder="vd: V10,V16">
+          <div class="hint" id="ac-region-hint"></div>
         </div>
         <button class="btn btn-primary" style="margin-top:16px;" onclick="createAccount()">Tạo tài khoản</button>
         <div id="ac-banner"></div>
@@ -914,7 +916,13 @@ function toggleAccountFields() {
   const role = document.getElementById('ac-role').value;
   const showManager = (role === 'SA' || role === 'SM');
   document.getElementById('ac-manager-field').style.display = showManager ? 'block' : 'none';
-  document.getElementById('ac-region-field').style.display = (role === 'SM') ? 'block' : 'none';
+
+  const showRegion = (role === 'SA' || role === 'SM');
+  document.getElementById('ac-region-field').style.display = showRegion ? 'block' : 'none';
+  if (showRegion) {
+    document.getElementById('ac-region-label').innerText = role === 'SM' ? 'Vùng phụ trách (mã vùng, phân cách dấu phẩy)' : 'Vùng phụ trách (mã vùng, phân cách dấu phẩy — không bắt buộc)';
+    document.getElementById('ac-region-hint').innerText = role === 'SA' ? 'Để trống nếu SA dùng chung toàn bộ vùng của SM quản lý mình.' : '';
+  }
   if (!showManager) return;
 
   const managerRole = role === 'SA' ? 'SM' : 'SSM';
