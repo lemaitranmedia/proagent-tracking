@@ -273,21 +273,8 @@
         <div class="mono" id="mn-code" style="font-size:15px;font-weight:600;color:var(--ink);"></div>
       </div>
 
-      <label style="margin-top:0;">Cấp độ meeting</label>
-      <select id="mn-level" onchange="onMeetingLevelChange()">
-        <option value="region">Cấp Vùng</option>
-        <option value="branch">Cấp Chi nhánh</option>
-      </select>
-
-      <div id="mn-region-field">
-        <label>Vùng kinh doanh</label>
-        <select id="mn-region"></select>
-      </div>
-
-      <div id="mn-branch-field" style="display:none;">
-        <label>Chi nhánh (có thể chọn nhiều)</label>
-        <div class="card" id="mn-branch-list" style="max-height:220px;overflow-y:auto;"></div>
-      </div>
+      <label style="margin-top:0;">Chi nhánh (có thể chọn nhiều)</label>
+      <div class="card" id="mn-branch-list" style="max-height:220px;overflow-y:auto;"></div>
 
       <label>Ngày họp</label>
       <input id="mn-date" type="date">
@@ -311,16 +298,17 @@
       <label>Thành phần tham dự</label>
       <div class="card" id="mn-attendees-list"></div>
 
-      <label>Nội dung trao đổi</label>
-      <textarea id="mn-content" placeholder="Tóm tắt nội dung đã trao đổi..."></textarea>
+      <label>Xác nhận vị trí (GPS Checkin)</label>
+      <div class="hint" style="margin-bottom:8px;">Hệ thống sẽ so vị trí GPS hiện tại với đúng (các) chi nhánh chị đã chọn ở trên.</div>
+      <div class="gps-box">
+        <div class="dot" id="mn-gps-dot"></div>
+        <div class="txt"><span class="lbl">Tọa độ hiện tại</span><span id="mn-gps-coords">Chưa lấy vị trí</span></div>
+      </div>
+      <button class="btn btn-outline" style="margin-top:10px;" onclick="captureMeetingGPS()">📡 Bật GPS & lấy vị trí</button>
+      <div id="mn-gps-pairing"></div>
+      <div class="hint" id="mn-gps-hint" style="margin-top:6px;"></div>
 
-      <label>Kết quả</label>
-      <textarea id="mn-result" placeholder="Kết quả đạt được..."></textarea>
-
-      <label>Hành động tiếp theo</label>
-      <textarea id="mn-nextaction" placeholder="Việc cần làm, người phụ trách, thời hạn..."></textarea>
-
-      <button class="btn btn-primary" style="margin-top:22px;" onclick="submitMeetingNow()">Gửi duyệt</button>
+      <button class="btn btn-primary" style="margin-top:22px;" id="mn-submit-btn" disabled onclick="submitMeetingNow()">Gửi duyệt</button>
       <button class="btn btn-ghost" onclick="goHome()">Quay về trang chủ</button>
     </div>
   </div>
@@ -369,8 +357,11 @@ const MEETING_PURPOSES = [
   'Trao đổi định kỳ tình hình kinh doanh',
   'Xử lý vấn đề phát sinh/khiếu nại',
   'Ký kết hợp tác/thỏa thuận',
+  'Huddle',
   'Khác'
 ];
+// Chỉ hiện với người tạo là SM (SA không thấy option này khi tạo meeting).
+const MEETING_PURPOSE_SM_ONLY = 'Họp chi nhánh (SM/TL)';
 
 /* Shortlist thành phần tham dự — chỉnh trực tiếp tại đây nếu cần thêm/bớt. */
 const ATTENDEE_ROLES = ['Lãnh đạo Chi nhánh','Lãnh đạo Vùng','PRM','SD','SM','SSM','SA','PNS','BD Miền','BD Vùng'];
@@ -387,6 +378,7 @@ let state = {
   regionsCache: [],
   branchesCache: [],
   resubmitFrom: null, // meeting_id của bản bị từ chối đang được sửa & gửi lại
+  meetingGps: null,
 };
 
 /* ============== API HELPER ============== */
@@ -504,6 +496,7 @@ function selectCheckpoint(id) {
 
 function goCheckinCapture() {
   state.gps = null; state.photoBase64 = null;
+  state.checkinId = genShortCode('CI'); // cố định cho lượt checkin này -> chống ghi trùng nếu bấm nhiều lần
   document.getElementById('gps-dot').classList.remove('on');
   document.getElementById('gps-coords').innerText = 'Chưa lấy vị trí';
   document.getElementById('photo-preview').style.display = 'none';
@@ -512,6 +505,13 @@ function goCheckinCapture() {
   banner('st-checkin-banner', '', '');
   document.getElementById('st-checkin-point-name').innerText = state.selectedCheckpoint.checkpoint_name;
   showScreen('screen-sitetour-checkin');
+}
+
+function genShortCode(prefix) {
+  const d = new Date();
+  const ymd = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+  const rand = Math.random().toString(36).slice(2,8).toUpperCase();
+  return `${prefix}-${ymd}-${rand}`;
 }
 
 function captureGPS() {
@@ -545,7 +545,10 @@ function checkSubmitReady() {
   document.getElementById('submit-checkin-btn').disabled = !(state.gps && state.photoBase64);
 }
 
+let isSubmittingCheckin = false;
 async function submitCheckinNow() {
+  if (isSubmittingCheckin) return; // chặn double-tap ngay từ phía client, không chờ tới backend
+  isSubmittingCheckin = true;
   const btn = document.getElementById('submit-checkin-btn');
   btn.disabled = true; btn.innerHTML = '<span class="loader"></span>Đang gửi...';
   try {
@@ -554,14 +557,16 @@ async function submitCheckinNow() {
       full_name: state.user.full_name,
       checkpoint_id: state.selectedCheckpoint.checkpoint_id,
       lat: state.gps.lat, long: state.gps.long,
-      photo_base64: state.photoBase64
+      photo_base64: state.photoBase64,
+      checkin_id: state.checkinId
     });
     renderStampResult(result);
     showScreen('screen-sitetour-result');
   } catch (e) {
     banner('st-checkin-banner','err', e.message);
-  } finally {
     btn.disabled = false; btn.innerHTML = 'Ghi nhận checkin';
+  } finally {
+    isSubmittingCheckin = false;
   }
 }
 
@@ -649,7 +654,11 @@ function meetingTitle(m) {
   return m.purpose_type === 'Khác' ? (m.purpose_other || 'Khác') : (m.purpose_type || '(chưa có mục đích)');
 }
 function meetingScopeLabel(m) {
-  return m.level === 'branch' ? `Chi nhánh: ${m.branch_codes || '—'}` : `Vùng: ${m.region_code || '—'}`;
+  return `Chi nhánh: ${m.branch_codes || '—'}`;
+}
+
+function isGpsInvalid(m) {
+  return m.gps_lat && String(m.gps_valid).toUpperCase() !== 'TRUE';
 }
 
 function renderMeetingRows(wrap, rows, isApprovalTab) {
@@ -657,16 +666,28 @@ function renderMeetingRows(wrap, rows, isApprovalTab) {
   wrap.innerHTML = '<div class="card">' + rows.map(m => `
     <div class="row" style="cursor:pointer;" onclick="openMeetingDetail('${m.meeting_id}')">
       <div class="l"><div class="t mono" style="font-size:12px;color:var(--slate);">${m.meeting_code || m.meeting_id}</div>
-        <div class="t">${meetingTitle(m)}</div>
+        <div class="t">${meetingTitle(m)} ${isGpsInvalid(m) ? '<span class="badge rejectedsm" title="GPS ngoài phạm vi chi nhánh đã chọn">⚠️ GPS</span>' : ''}</div>
         <div class="s">${m.creator_name || m.creator_username} · ${meetingScopeLabel(m)} · ${fmtDate(m.meeting_date || m.created_at)}</div></div>
       <div class="r"><span class="badge ${String(m.status).toLowerCase()}">${statusLabel(m.status)}</span></div>
     </div>`).join('') + '</div>';
+}
+
+function purposeOptionsForRole(role) {
+  const list = [...MEETING_PURPOSES];
+  if (role === 'SM') list.splice(list.length - 1, 0, MEETING_PURPOSE_SM_ONLY); // chèn trước "Khác"
+  return list;
 }
 
 async function goMeetingNewForm(prefill) {
   showScreen('screen-meeting-new');
   banner('mn-banner','','');
   state.resubmitFrom = prefill ? prefill.meeting_id : null;
+  state.meetingGps = null;
+  document.getElementById('mn-gps-dot').classList.remove('on');
+  document.getElementById('mn-gps-coords').innerText = 'Chưa lấy vị trí';
+  document.getElementById('mn-gps-hint').innerText = '';
+  document.getElementById('mn-gps-pairing').innerHTML = '';
+  document.getElementById('mn-submit-btn').disabled = true;
 
   // Sinh mã meeting mới ngay khi mở form
   document.getElementById('mn-code').innerText = genMeetingCode();
@@ -675,18 +696,15 @@ async function goMeetingNewForm(prefill) {
     banner('mn-banner','info',`Đang tạo lại từ meeting bị từ chối <b>${prefill.meeting_code || prefill.meeting_id}</b> — thông tin cũ đã được điền sẵn, chị chỉ cần chỉnh sửa phần cần thiết.`);
   }
 
-  document.getElementById('mn-level').value = prefill ? prefill.level : 'region';
   document.getElementById('mn-date').value = prefill ? prefill.meeting_date : '';
   document.getElementById('mn-start-time').value = prefill ? prefill.start_time : '';
   document.getElementById('mn-end-time').value = prefill ? prefill.end_time : '';
-  document.getElementById('mn-content').value = prefill ? (prefill.content || '') : '';
-  document.getElementById('mn-result').value = prefill ? (prefill.result || '') : '';
-  document.getElementById('mn-nextaction').value = prefill ? (prefill.next_action || '') : '';
 
-  // Mục đích cuộc họp
+  // Mục đích cuộc họp — "Họp chi nhánh (SM/TL)" chỉ hiện khi người tạo là SM
+  const options = purposeOptionsForRole(state.user.role);
   const purSel = document.getElementById('mn-purpose-type');
-  purSel.innerHTML = MEETING_PURPOSES.map(p => `<option value="${p}">${p}</option>`).join('');
-  purSel.value = prefill && prefill.purpose_type ? prefill.purpose_type : MEETING_PURPOSES[0];
+  purSel.innerHTML = options.map(p => `<option value="${p}">${p}</option>`).join('');
+  purSel.value = prefill && options.includes(prefill.purpose_type) ? prefill.purpose_type : options[0];
   document.getElementById('mn-purpose-other').value = prefill ? (prefill.purpose_other || '') : '';
   onPurposeTypeChange();
 
@@ -697,30 +715,21 @@ async function goMeetingNewForm(prefill) {
       <input type="checkbox" value="${role}" ${selectedAttendees.includes(role)?'checked':''} style="width:auto;" class="mn-attendee-cb"> ${role}
     </label>`).join('');
 
-  // Vùng + Chi nhánh — chỉ lấy đúng phạm vi được gán cho user này (không lộ toàn bộ database)
+  // Chi nhánh — chỉ lấy đúng phạm vi vùng được gán cho user này (không lộ toàn bộ database)
   try {
     const scope = await api('getMeetingScopeForUser', { username: state.user.username });
-    const regions = scope.regions; const branches = scope.branches;
-    state.regionsCache = regions; state.branchesCache = branches;
-
-    const regionSel = document.getElementById('mn-region');
-    regionSel.innerHTML = regions.length
-      ? regions.map(r => `<option value="${r.region_code}">${r.region_code} — ${r.region_name}</option>`).join('')
-      : '<option value="">(chưa được gán vùng nào)</option>';
-    if (prefill && prefill.level !== 'branch') regionSel.value = prefill.region_code;
+    state.branchesCache = scope.branches;
 
     const selectedBranches = prefill ? String(prefill.branch_codes || '').split(',').map(s=>s.trim()).filter(Boolean) : [];
-    document.getElementById('mn-branch-list').innerHTML = branches.length
-      ? branches.map((b,i) => `
+    document.getElementById('mn-branch-list').innerHTML = scope.branches.length
+      ? scope.branches.map((b,i) => `
         <label style="display:flex;align-items:center;gap:8px;margin:${i===0?'0':'10px'} 0 0;font-weight:400;">
-          <input type="checkbox" value="${b.branch_code}" ${selectedBranches.includes(b.branch_code)?'checked':''} style="width:auto;" class="mn-branch-cb"> ${b.branch_name} <span class="mono" style="color:var(--slate);font-size:11px;">(${b.region_code})</span>
+          <input type="checkbox" value="${b.branch_code}" ${selectedBranches.includes(b.branch_code)?'checked':''} style="width:auto;" class="mn-branch-cb" onchange="renderGpsPairing()"> ${b.branch_name} <span class="mono" style="color:var(--slate);font-size:11px;">(${b.region_code})</span>
         </label>`).join('')
       : '<div class="empty" style="padding:14px;">Chưa có chi nhánh nào trong phạm vi vùng được gán.</div>';
   } catch (e) {
     banner('mn-banner','err', e.message);
   }
-
-  onMeetingLevelChange();
 }
 
 function genMeetingCode() {
@@ -730,56 +739,102 @@ function genMeetingCode() {
   return `MTG-${ymd}-${rand}`;
 }
 
-function onMeetingLevelChange() {
-  const level = document.getElementById('mn-level').value;
-  document.getElementById('mn-region-field').style.display = level === 'region' ? 'block' : 'none';
-  document.getElementById('mn-branch-field').style.display = level === 'branch' ? 'block' : 'none';
-}
-
 function onPurposeTypeChange() {
   const isOther = document.getElementById('mn-purpose-type').value === 'Khác';
   document.getElementById('mn-purpose-other-field').style.display = isOther ? 'block' : 'none';
 }
 
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Hiển thị ngay việc GPS "pairing" với đúng (các) chi nhánh đang được chọn —
+// không so với chi nhánh nào khác ngoài danh sách đã tick.
+function renderGpsPairing() {
+  const wrap = document.getElementById('mn-gps-pairing');
+  const checked = Array.from(document.querySelectorAll('.mn-branch-cb:checked')).map(el => el.value);
+  if (!state.meetingGps || !checked.length) { wrap.innerHTML = ''; return; }
+  const rows = checked.map(code => {
+    const br = state.branchesCache.find(b => b.branch_code === code);
+    if (!br || !br.lat || !br.long) return `<div class="row"><div class="l"><div class="t">${br ? br.branch_name : code}</div><div class="s">Chưa có tọa độ chi nhánh</div></div></div>`;
+    const dist = Math.round(haversineMeters(state.meetingGps.lat, state.meetingGps.long, Number(br.lat), Number(br.long)));
+    const valid = dist <= Number(br.radius_m || 150);
+    return `<div class="row"><div class="l"><div class="t">${br.branch_name}</div><div class="s">Cách ${dist}m (cho phép ${br.radius_m}m)</div></div>
+      <div class="r"><span class="badge ${valid?'approved':'rejectedsm'}">${valid?'Hợp lệ':'Ngoài phạm vi'}</span></div></div>`;
+  }).join('');
+  wrap.innerHTML = `<div class="card" style="margin-top:10px;">${rows}</div>`;
+}
+
+function captureMeetingGPS() {
+  if (!navigator.geolocation) { document.getElementById('mn-gps-hint').innerText = 'Trình duyệt không hỗ trợ GPS.'; return; }
+  document.getElementById('mn-gps-hint').innerText = 'Đang lấy vị trí — vui lòng cho phép quyền truy cập vị trí...';
+  navigator.geolocation.getCurrentPosition(pos => {
+    state.meetingGps = { lat: pos.coords.latitude, long: pos.coords.longitude, accuracy: pos.coords.accuracy };
+    document.getElementById('mn-gps-dot').classList.add('on');
+    document.getElementById('mn-gps-coords').innerText = `${state.meetingGps.lat.toFixed(6)}, ${state.meetingGps.long.toFixed(6)} (±${Math.round(state.meetingGps.accuracy)}m)`;
+    document.getElementById('mn-gps-hint').innerText = '';
+    document.getElementById('mn-submit-btn').disabled = false;
+    renderGpsPairing();
+  }, err => {
+    document.getElementById('mn-gps-hint').innerText = 'Không lấy được vị trí: ' + err.message + '. Vui lòng bật GPS/định vị trên thiết bị.';
+  }, { enableHighAccuracy: true, timeout: 15000 });
+}
+
+let isSubmittingMeeting = false;
 async function submitMeetingNow() {
-  const level = document.getElementById('mn-level').value;
+  if (isSubmittingMeeting) return; // chặn double-tap ngay từ phía client
   const attendees = Array.from(document.querySelectorAll('.mn-attendee-cb:checked')).map(el => el.value).join(',');
   const branchCodes = Array.from(document.querySelectorAll('.mn-branch-cb:checked')).map(el => el.value).join(',');
   const purposeType = document.getElementById('mn-purpose-type').value;
   const purposeOther = document.getElementById('mn-purpose-other').value.trim();
 
+  if (!state.meetingGps) { document.getElementById('mn-gps-hint').innerText = 'Vui lòng bấm "Bật GPS & lấy vị trí" trước khi gửi.'; return; }
+  if (!branchCodes) { banner('mn-banner','err','Vui lòng chọn ít nhất 1 Chi nhánh.'); return; }
+
   const payload = {
     creator_username: state.user.username,
     meeting_code: document.getElementById('mn-code').innerText,
-    level,
-    region_code: level === 'region' ? document.getElementById('mn-region').value : '',
-    branch_codes: level === 'branch' ? branchCodes : '',
+    branch_codes: branchCodes,
     meeting_date: document.getElementById('mn-date').value,
     start_time: document.getElementById('mn-start-time').value,
     end_time: document.getElementById('mn-end-time').value,
     purpose_type: purposeType,
     purpose_other: purposeOther,
     attendees,
-    content: document.getElementById('mn-content').value.trim(),
-    result: document.getElementById('mn-result').value.trim(),
-    next_action: document.getElementById('mn-nextaction').value.trim(),
+    gps_lat: state.meetingGps.lat,
+    gps_long: state.meetingGps.long,
     resubmitted_from: state.resubmitFrom || ''
   };
 
   if (!payload.meeting_date || !payload.start_time || !payload.end_time) {
     banner('mn-banner','err','Vui lòng nhập đủ Ngày họp, Giờ bắt đầu và Giờ kết thúc.'); return;
   }
-  if (level === 'region' && !payload.region_code) { banner('mn-banner','err','Vui lòng chọn Vùng kinh doanh.'); return; }
-  if (level === 'branch' && !branchCodes) { banner('mn-banner','err','Vui lòng chọn ít nhất 1 Chi nhánh.'); return; }
   if (purposeType === 'Khác' && !purposeOther) { banner('mn-banner','err','Vui lòng nhập nội dung cho mục đích "Khác".'); return; }
 
+  isSubmittingMeeting = true;
+  const submitBtn = document.getElementById('mn-submit-btn');
+  submitBtn.disabled = true;
+  const originalLabel = submitBtn.innerText;
+  submitBtn.innerHTML = '<span class="loader"></span>Đang gửi...';
+
   try {
-    await api('createMeeting', payload);
-    banner('mn-banner','ok','Đã gửi biên bản đi duyệt.');
+    const result = await api('createMeeting', payload);
+    banner('mn-banner','ok', result.gps_valid
+      ? 'Đã gửi biên bản đi duyệt — vị trí GPS hợp lệ (cách chi nhánh ' + result.gps_distance_m + 'm).'
+      : 'Đã gửi biên bản đi duyệt — lưu ý vị trí GPS ngoài phạm vi chi nhánh (' + result.gps_distance_m + 'm).');
     state.resubmitFrom = null;
-    setTimeout(() => { switchMeetingTab('history'); showScreen('screen-meeting-home'); }, 700);
+    setTimeout(() => { switchMeetingTab('history'); showScreen('screen-meeting-home'); }, 900);
   } catch (e) {
     banner('mn-banner','err', e.message);
+    submitBtn.disabled = false;
+    submitBtn.innerText = originalLabel;
+  } finally {
+    isSubmittingMeeting = false;
   }
 }
 
@@ -789,13 +844,7 @@ async function openMeetingDetail(id) {
   const body = document.getElementById('meeting-detail-body');
   body.innerHTML = '<div class="empty">Đang tải...</div>';
   try {
-    const historyRows = await api('listMeetings', { username: state.user.username, role: state.user.role });
-    let m = historyRows.find(x => x.meeting_id === id);
-    if (!m) { // fallback: cũng có thể đang nằm trong hàng chờ duyệt
-      const approvalRows = await api('listMeetingsForApproval', { username: state.user.username });
-      m = approvalRows.find(x => x.meeting_id === id);
-    }
-    if (!m) { body.innerHTML = '<div class="empty">Không tìm thấy meeting.</div>'; return; }
+    const m = await api('getMeetingById', { username: state.user.username, meeting_id: id });
     currentMeetingDetail = m;
     const canApprove = (state.user.role === 'SM' && m.status === 'PendingSM') || (state.user.role === 'SSM' && m.status === 'PendingSSM');
     const canResubmit = (m.status === 'RejectedSM' || m.status === 'RejectedSSM') && m.creator_username === state.user.username;
@@ -806,13 +855,14 @@ async function openMeetingDetail(id) {
         <h2 style="margin:4px 0 2px;">${meetingTitle(m)}</h2>
         <div class="desc" style="margin-bottom:10px;">${m.creator_name || m.creator_username} (${roleLabel(m.creator_role)}) · ${meetingScopeLabel(m)}<br>${fmtDate(m.meeting_date)} · ${m.start_time || '—'}–${m.end_time || '—'}</div>
         <label style="margin-top:6px;">Thành phần tham dự</label><div>${m.attendees ? m.attendees.split(',').join(', ') : '—'}</div>
-        <label>Nội dung trao đổi</label><div>${m.content || '—'}</div>
-        <label>Kết quả</label><div>${m.result || '—'}</div>
-        <label>Hành động tiếp theo</label><div>${m.next_action || '—'}</div>
+        <label>Vị trí GPS checkin</label>
+        <div>${m.gps_lat ? `<span class="mono">${Number(m.gps_lat).toFixed(6)}, ${Number(m.gps_long).toFixed(6)}</span> — cách chi nhánh ${m.gps_branch_code || 'đã chọn'} khoảng ${m.gps_distance_m}m ${String(m.gps_valid).toUpperCase()==='TRUE' ? '<span class="badge approved">Hợp lệ</span>' : '<span class="badge rejectedsm">Ngoài phạm vi</span>'}` : '—'}</div>
         ${m.sm_note ? `<label>Ghi chú SM</label><div>${m.sm_note}</div>` : ''}
         ${m.ssm_note ? `<label>Ghi chú SSM</label><div>${m.ssm_note}</div>` : ''}
         ${m.resubmitted_from ? `<div class="hint" style="margin-top:10px;">Được tạo lại từ meeting <span class="mono">${m.resubmitted_from}</span></div>` : ''}
       </div>
+      ${canApprove && isGpsInvalid(m) ? `
+      <div class="banner err" style="font-weight:600;">⚠️ Meeting này được tạo bên ngoài vị trí chi nhánh đã chọn (cách khoảng ${m.gps_distance_m}m, vượt bán kính cho phép). Vui lòng xác minh trước khi duyệt.</div>` : ''}
       ${canApprove ? `
       <div class="card">
         <label style="margin-top:0;">Ghi chú duyệt (không bắt buộc)</label>
@@ -830,7 +880,12 @@ async function openMeetingDetail(id) {
   }
 }
 
+let isApprovingMeeting = false;
 async function doApprove(decision) {
+  if (isApprovingMeeting) return;
+  isApprovingMeeting = true;
+  const buttons = document.querySelectorAll('.btn-row .btn-danger, .btn-row .btn-primary');
+  buttons.forEach(b => b.disabled = true);
   const note = document.getElementById('approve-note') ? document.getElementById('approve-note').value : '';
   try {
     await api('approveMeeting', {
@@ -843,6 +898,9 @@ async function doApprove(decision) {
     switchMeetingTab('approval');
   } catch (e) {
     alert(e.message);
+    buttons.forEach(b => b.disabled = false);
+  } finally {
+    isApprovingMeeting = false;
   }
 }
 
@@ -888,7 +946,7 @@ async function renderAdminAccounts() {
           <input id="ac-regions" placeholder="vd: V10,V16">
           <div class="hint" id="ac-region-hint"></div>
         </div>
-        <button class="btn btn-primary" style="margin-top:16px;" onclick="createAccount()">Tạo tài khoản</button>
+        <button class="btn btn-primary" style="margin-top:16px;" onclick="createAccount(event)">Tạo tài khoản</button>
         <div id="ac-banner"></div>
       </div>`;
     const listHtml = '<div class="card">' + accounts.map(a => `
@@ -935,7 +993,9 @@ function toggleAccountFields() {
     : '<option value="">—</option>';
 }
 
-async function createAccount() {
+async function createAccount(evt) {
+  const btn = evt ? evt.currentTarget : null;
+  if (btn && btn.disabled) return;
   const payload = {
     username: document.getElementById('ac-username').value.trim(),
     password: document.getElementById('ac-password').value,
@@ -947,12 +1007,14 @@ async function createAccount() {
   if (!payload.username || !payload.password || !payload.full_name) {
     banner('ac-banner','err','Vui lòng nhập đủ Username, Mật khẩu, Họ tên.'); return;
   }
+  if (btn) btn.disabled = true;
   try {
     await api('adminCreateAccount', payload);
     banner('ac-banner','ok','Đã tạo tài khoản.');
     setTimeout(renderAdminAccounts, 500);
   } catch (e) {
     banner('ac-banner','err', e.message);
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -973,7 +1035,7 @@ async function renderAdminRegions() {
         <label style="margin-top:0;">Mã vùng</label><input id="rg-code" placeholder="vd: V10">
         <label>Tên vùng</label><input id="rg-name" placeholder="vd: Vùng 10 - Quận 7">
         <label>Username SM phụ trách</label><input id="rg-sm" placeholder="username SM">
-        <button class="btn btn-primary" style="margin-top:16px;" onclick="createRegion()">Tạo vùng</button>
+        <button class="btn btn-primary" style="margin-top:16px;" onclick="createRegion(event)">Tạo vùng</button>
         <div id="rg-banner"></div>
       </div>`;
     const listHtml = '<div class="card">' + (regions.length ? regions.map(r => `
@@ -983,11 +1045,14 @@ async function renderAdminRegions() {
   } catch (e) { wrap.innerHTML = `<div class="banner err">${e.message}</div>`; }
 }
 
-async function createRegion() {
+async function createRegion(evt) {
+  const btn = evt ? evt.currentTarget : null;
+  if (btn && btn.disabled) return;
   const payload = { region_code: document.getElementById('rg-code').value.trim(), region_name: document.getElementById('rg-name').value.trim(), sm_username: document.getElementById('rg-sm').value.trim() };
   if (!payload.region_code || !payload.region_name) { banner('rg-banner','err','Nhập Mã vùng và Tên vùng.'); return; }
+  if (btn) btn.disabled = true;
   try { await api('adminCreateRegion', payload); banner('rg-banner','ok','Đã tạo vùng.'); setTimeout(renderAdminRegions, 500); }
-  catch (e) { banner('rg-banner','err', e.message); }
+  catch (e) { banner('rg-banner','err', e.message); if (btn) btn.disabled = false; }
 }
 
 async function renderAdminBranchesTab() {
@@ -1002,25 +1067,36 @@ async function renderAdminBranchesTab() {
         <label>Tên chi nhánh</label><input id="br-name" placeholder="vd: Chi nhánh Quận 7">
         <label>Thuộc Vùng</label>
         <select id="br-region">${regions.map(r => `<option value="${r.region_code}">${r.region_code} — ${r.region_name}</option>`).join('') || '<option value="">(chưa có vùng)</option>'}</select>
-        <button class="btn btn-primary" style="margin-top:16px;" onclick="createBranch()">Tạo chi nhánh</button>
+        <label>Latitude</label><input id="br-lat" type="number" step="0.000001" placeholder="vd: 10.8030065">
+        <label>Longitude</label><input id="br-long" type="number" step="0.000001" placeholder="vd: 106.7767749">
+        <label>Bán kính GPS checkin cho phép (m)</label><input id="br-radius" type="number" value="150">
+        <div class="hint">Tọa độ này dùng để xác thực vị trí GPS khi SA/SM tạo Meeting tại chi nhánh (không dùng cho Sitetour).</div>
+        <button class="btn btn-primary" style="margin-top:16px;" onclick="createBranch(event)">Tạo chi nhánh</button>
         <div id="br-banner"></div>
       </div>`;
     const listHtml = '<div class="card">' + (branches.length ? branches.map(b => `
-      <div class="row"><div class="l"><div class="t">${b.branch_name}</div><div class="s mono">${b.branch_code} · Vùng ${b.region_code}</div></div></div>`).join('')
+      <div class="row"><div class="l"><div class="t">${b.branch_name}</div><div class="s mono">${b.branch_code} · Vùng ${b.region_code} · ${b.lat && b.long ? Number(b.lat).toFixed(5)+', '+Number(b.long).toFixed(5)+' · r='+b.radius_m+'m' : 'chưa có tọa độ'}</div></div></div>`).join('')
       : '<div class="empty">Chưa có chi nhánh nào.</div>') + '</div>';
     wrap.innerHTML = formHtml + listHtml;
   } catch (e) { wrap.innerHTML = `<div class="banner err">${e.message}</div>`; }
 }
 
-async function createBranch() {
+async function createBranch(evt) {
+  const btn = evt ? evt.currentTarget : null;
+  if (btn && btn.disabled) return;
   const payload = {
     branch_code: document.getElementById('br-code').value.trim(),
     branch_name: document.getElementById('br-name').value.trim(),
     region_code: document.getElementById('br-region').value,
+    lat: document.getElementById('br-lat').value,
+    long: document.getElementById('br-long').value,
+    radius_m: document.getElementById('br-radius').value || 150,
   };
   if (!payload.branch_name || !payload.region_code) { banner('br-banner','err','Nhập Tên chi nhánh và chọn Vùng.'); return; }
+  if (!payload.lat || !payload.long) { banner('br-banner','err','Nhập Latitude và Longitude để phục vụ GPS checkin khi tạo Meeting.'); return; }
+  if (btn) btn.disabled = true;
   try { await api('adminCreateBranch', payload); banner('br-banner','ok','Đã tạo chi nhánh.'); setTimeout(renderAdminBranchesTab, 500); }
-  catch (e) { banner('br-banner','err', e.message); }
+  catch (e) { banner('br-banner','err', e.message); if (btn) btn.disabled = false; }
 }
 
 async function renderAdminCheckpoints() {
@@ -1037,7 +1113,7 @@ async function renderAdminCheckpoints() {
         <label>Longitude</label><input id="cp-long" type="number" step="0.000001" placeholder="vd: 106.7767749">
         <label>Bán kính cho phép (m)</label><input id="cp-radius" type="number" value="100">
         <div class="hint">Mẹo: mở Google Maps, giữ ghim tại điểm cần checkin để lấy tọa độ chính xác.</div>
-        <button class="btn btn-primary" style="margin-top:16px;" onclick="createCheckpoint()">Tạo điểm checkin</button>
+        <button class="btn btn-primary" style="margin-top:16px;" onclick="createCheckpoint(event)">Tạo điểm checkin</button>
         <div id="cp-banner"></div>
       </div>`;
     const listHtml = '<div class="card">' + (cps.length ? cps.map(c => `
@@ -1047,7 +1123,9 @@ async function renderAdminCheckpoints() {
   } catch (e) { wrap.innerHTML = `<div class="banner err">${e.message}</div>`; }
 }
 
-async function createCheckpoint() {
+async function createCheckpoint(evt) {
+  const btn = evt ? evt.currentTarget : null;
+  if (btn && btn.disabled) return;
   const payload = {
     checkpoint_name: document.getElementById('cp-name').value.trim(),
     lat: document.getElementById('cp-lat').value,
@@ -1055,8 +1133,9 @@ async function createCheckpoint() {
     radius_m: document.getElementById('cp-radius').value || 100,
   };
   if (!payload.checkpoint_name || !payload.lat || !payload.long) { banner('cp-banner','err','Nhập đủ Tên điểm, Latitude, Longitude.'); return; }
+  if (btn) btn.disabled = true;
   try { await api('adminCreateCheckpoint', payload); banner('cp-banner','ok','Đã tạo điểm checkin.'); setTimeout(renderAdminCheckpoints, 500); }
-  catch (e) { banner('cp-banner','err', e.message); }
+  catch (e) { banner('cp-banner','err', e.message); if (btn) btn.disabled = false; }
 }
 </script>
 </body>
